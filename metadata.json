@@ -1,0 +1,6 @@
+{
+  "name": "Code Editor",
+  "description": "A multi-pane code editor interface inspired by VS Code and Zed.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
