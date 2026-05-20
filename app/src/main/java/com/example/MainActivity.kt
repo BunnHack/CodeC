@@ -52,6 +52,19 @@ val INITIAL_FILES = listOf(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            try {
+                val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                val crashFile = java.io.File(downloadsDir, "CodeEditor_CrashLog_${System.currentTimeMillis()}.txt")
+                crashFile.writeText("Error: ${throwable.message}\n\nStackTrace:\n${throwable.stackTraceToString()}")
+            } catch (e: Exception) {
+                e.printStackTrace() // Ignore
+            }
+            defaultHandler?.uncaughtException(thread, throwable)
+        }
+        
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
