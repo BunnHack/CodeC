@@ -88,16 +88,23 @@ fun CodeEditorApp(modifier: Modifier = Modifier) {
             // Tabs Row
             EditorTabs(selectedFile = selectedFile)
 
-            // Editor Input
-            CodeEditorPane(
-                code = fileContents[selectedFile.name] ?: "",
-                onCodeChange = { newCode ->
-                    val updated = fileContents.toMutableMap()
-                    updated[selectedFile.name] = newCode
-                    fileContents = updated
-                },
-                modifier = Modifier.weight(1f)
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                // Editor Input
+                CodeEditorPane(
+                    code = fileContents[selectedFile.name] ?: "",
+                    onCodeChange = { newCode ->
+                        val updated = fileContents.toMutableMap()
+                        updated[selectedFile.name] = newCode
+                        fileContents = updated
+                    },
+                    modifier = Modifier.weight(0.7f)
+                )
+
+                HorizontalDivider(color = BorderColor, thickness = 1.dp)
+
+                // Terminal Pane
+                TerminalPane(modifier = Modifier.weight(0.3f))
+            }
 
             // Status Bar
             StatusBar()
@@ -265,6 +272,54 @@ fun CodeEditorPane(code: String, onCodeChange: (String) -> Unit, modifier: Modif
                 modifier = Modifier.fillMaxWidth()
             )
         }
+    }
+}
+
+@Composable
+fun TerminalPane(modifier: Modifier = Modifier) {
+    var terminalText by remember { mutableStateOf("susbontan@code-editor:~/project$ ") }
+    
+    Column(modifier = modifier.fillMaxWidth().background(EditorBackground)) {
+        // Terminal Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                Text("PROBLEMS", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp)
+                Text("OUTPUT", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp)
+                Text("DEBUG CONSOLE", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp)
+                Column {
+                    Text("TERMINAL", color = TextNormal, fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp)
+                    Box(modifier = Modifier.padding(top = 4.dp).height(2.dp).width(55.dp).background(AccentColor))
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Icon(Icons.Filled.Add, contentDescription = "New Terminal", tint = TextMuted, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Delete, contentDescription = "Kill Terminal", tint = TextMuted, modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.Close, contentDescription = "Close Panel", tint = TextMuted, modifier = Modifier.size(16.dp))
+            }
+        }
+        
+        // Terminal Content
+        BasicTextField(
+            value = terminalText,
+            onValueChange = { terminalText = it },
+            textStyle = TextStyle(
+                color = TextNormal,
+                fontFamily = FontFamily.Monospace,
+                fontSize = 13.sp,
+                lineHeight = 20.sp
+            ),
+            cursorBrush = SolidColor(TextNormal),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 8.dp)
+        )
     }
 }
 
