@@ -35,6 +35,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
+import com.termux.view.TerminalView
+import com.termux.terminal.TerminalSession
+import com.termux.terminal.TerminalSessionClient
 
 data class CodeFile(val name: String, val content: String, val isFolder: Boolean = false)
 
@@ -277,8 +280,39 @@ fun CodeEditorPane(code: String, onCodeChange: (String) -> Unit, modifier: Modif
 
 @Composable
 fun TerminalPane(modifier: Modifier = Modifier) {
-    var terminalText by remember { mutableStateOf("susbontan@code-editor:~/project$ ") }
+    var terminalSession by remember { mutableStateOf<TerminalSession?>(null) }
     
+    // Fake client to satisfy the API
+    val client = remember {
+        object : TerminalSessionClient {
+            override fun onTextChanged(session: TerminalSession) {}
+            override fun onTitleChanged(session: TerminalSession) {}
+            override fun onSessionFinished(session: TerminalSession) {}
+            override fun onCopyTextToClipboard(session: TerminalSession, text: String) {}
+            override fun onPasteTextFromClipboard(session: TerminalSession) {}
+            override fun onBell(session: TerminalSession) {}
+            override fun onColorsChanged(session: TerminalSession) {}
+            override fun onTerminalCursorStateChange(state: Boolean) {}
+            override fun getTerminalCursorStyle(): Int = 0
+            override fun logError(tag: String?, message: String?) {}
+            override fun logWarn(tag: String?, message: String?) {}
+            override fun logInfo(tag: String?, message: String?) {}
+            override fun logDebug(tag: String?, message: String?) {}
+            override fun logVerbose(tag: String?, message: String?) {}
+            override fun logStackTraceWithMessage(tag: String?, message: String?, e: Exception?) {}
+            override fun logStackTrace(tag: String?, e: Exception?) {}
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val cwd = "/"
+        val shell = "/system/bin/sh"
+        val env = arrayOf("TERM=xterm-256color")
+        terminalSession = TerminalSession(shell, cwd, arrayOf(shell), env, 1000, client)
+        // Note: initializing pseudo terminal with initializeEmulator() triggers JNI
+        // terminalSession?.updateSize(80, 24)
+    }
+
     Column(modifier = modifier.fillMaxWidth().background(EditorBackground)) {
         // Terminal Header
         Row(
@@ -305,21 +339,18 @@ fun TerminalPane(modifier: Modifier = Modifier) {
         }
         
         // Terminal Content
-        BasicTextField(
-            value = terminalText,
-            onValueChange = { terminalText = it },
-            textStyle = TextStyle(
-                color = TextNormal,
-                fontFamily = FontFamily.Monospace,
-                fontSize = 13.sp,
-                lineHeight = 20.sp
-            ),
-            cursorBrush = SolidColor(TextNormal),
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 16.dp)
-                .padding(bottom = 8.dp)
-        )
+        if (terminalSession != null) {
+            androidx.compose.ui.viewinterop.AndroidView(
+                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 8.dp),
+                factory = { context ->
+                    TerminalView(context, null).apply {
+                        attachSession(terminalSession)
+                    }
+                }
+            )
+        } else {
+            Box(modifier = Modifier.fillMaxSize()) // Loading
+        }
     }
 }
 
