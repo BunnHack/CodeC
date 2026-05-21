@@ -397,6 +397,9 @@ fun TerminalPane(modifier: Modifier = Modifier) {
 
 @Composable
 fun StatusBar() {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var isSaving by remember { mutableStateOf(false) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -409,6 +412,40 @@ fun StatusBar() {
             Icon(Icons.Filled.Share, contentDescription = "Branch", tint = StatusBarText, modifier = Modifier.size(12.dp))
             Spacer(modifier = Modifier.width(6.dp))
             Text("main*", color = StatusBarText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            Row(
+                modifier = Modifier
+                    .clickable {
+                        if (isSaving) return@clickable
+                        isSaving = true
+                        try {
+                            val process = Runtime.getRuntime().exec("logcat -d")
+                            val bufferedReader = java.io.BufferedReader(java.io.InputStreamReader(process.inputStream))
+                            val log = java.lang.StringBuilder()
+                            var line: String? = bufferedReader.readLine()
+                            while (line != null) {
+                                log.append(line).append("\n")
+                                line = bufferedReader.readLine()
+                            }
+                            val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                            val debugFile = java.io.File(downloadsDir, "CodeEditor_DebugLog_${System.currentTimeMillis()}.txt")
+                            debugFile.writeText(log.toString())
+                            android.widget.Toast.makeText(context, "Debug log saved to Downloads", android.widget.Toast.LENGTH_SHORT).show()
+                        } catch (e: Exception) {
+                            e.printStackTrace()
+                            android.widget.Toast.makeText(context, "Failed to save log", android.widget.Toast.LENGTH_SHORT).show()
+                        } finally {
+                            isSaving = false
+                        }
+                    }
+                    .padding(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Build, contentDescription = "Debug Log", tint = StatusBarText, modifier = Modifier.size(12.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Save Debug Log", color = StatusBarText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            }
         }
         
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
