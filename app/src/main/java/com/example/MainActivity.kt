@@ -35,6 +35,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.*
+import com.termux.view.TerminalView
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
 
@@ -55,8 +56,8 @@ class MainActivity : ComponentActivity() {
         val defaultHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
             try {
-                val filesDir = getExternalFilesDir(null)
-                val crashFile = java.io.File(filesDir, "CodeEditor_CrashLog_${System.currentTimeMillis()}.txt")
+                val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                val crashFile = java.io.File(downloadsDir, "CodeEditor_CrashLog_${System.currentTimeMillis()}.txt")
                 crashFile.writeText("Error: ${throwable.message}\n\nStackTrace:\n${throwable.stackTraceToString()}")
             } catch (e: Exception) {
                 e.printStackTrace() // Ignore
@@ -84,79 +85,51 @@ fun CodeEditorApp(modifier: Modifier = Modifier) {
     var selectedFile by remember { mutableStateOf(INITIAL_FILES[1]) }
     var fileContents by remember { mutableStateOf(INITIAL_FILES.associate { it.name to it.content }.toMutableMap()) }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val isCompact = maxWidth < 600.dp
-        var isSidebarVisible by remember(isCompact) { mutableStateOf(!isCompact) }
+    Row(modifier = modifier.fillMaxSize()) {
+        // Activity Bar (Far Left)
+        ActivityBar()
 
-        Row(modifier = Modifier.fillMaxSize()) {
-            if (!isCompact) {
-                ActivityBar(onToggleSidebar = { isSidebarVisible = !isSidebarVisible })
-                if (isSidebarVisible) {
-                    Sidebar(
-                        files = INITIAL_FILES,
-                        selectedFile = selectedFile,
-                        onFileSelected = { selectedFile = it },
-                        modifier = Modifier
-                    )
-                    VerticalDivider(color = BorderColor, thickness = 1.dp)
-                }
+        // Explorer Sidebar
+        Sidebar(
+            files = INITIAL_FILES,
+            selectedFile = selectedFile,
+            onFileSelected = { selectedFile = it }
+        )
+        VerticalDivider(color = BorderColor, thickness = 1.dp)
+
+        // Main Editor Area
+        Column(modifier = Modifier
+            .weight(1f)
+            .background(EditorBackground)) {
+            // Tabs Row
+            EditorTabs(selectedFile = selectedFile)
+
+            Column(modifier = Modifier.weight(1f)) {
+                // Editor Input
+                CodeEditorPane(
+                    code = fileContents[selectedFile.name] ?: "",
+                    onCodeChange = { newCode ->
+                        val updated = fileContents.toMutableMap()
+                        updated[selectedFile.name] = newCode
+                        fileContents = updated
+                    },
+                    modifier = Modifier.weight(0.7f)
+                )
+
+                HorizontalDivider(color = BorderColor, thickness = 1.dp)
+
+                // Terminal Pane
+                TerminalPane(modifier = Modifier.weight(0.3f))
             }
 
-            Column(modifier = Modifier.weight(1f).background(EditorBackground)) {
-                if (isCompact) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(ActivityBarBackground)
-                            .padding(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { isSidebarVisible = !isSidebarVisible }) {
-                            Icon(Icons.Filled.Menu, contentDescription = "Menu", tint = TextNormal)
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(selectedFile.name, color = TextNormal)
-                    }
-                } else {
-                    EditorTabs(selectedFile = selectedFile)
-                }
-
-                if (isCompact && isSidebarVisible) {
-                    Sidebar(
-                        files = INITIAL_FILES,
-                        selectedFile = selectedFile,
-                        onFileSelected = { 
-                            selectedFile = it
-                            isSidebarVisible = false 
-                        },
-                        modifier = Modifier.fillMaxWidth().weight(1f)
-                    )
-                } else {
-                    Column(modifier = Modifier.weight(1f)) {
-                        CodeEditorPane(
-                            code = fileContents[selectedFile.name] ?: "",
-                            onCodeChange = { newCode ->
-                                val updated = fileContents.toMutableMap()
-                                updated[selectedFile.name] = newCode
-                                fileContents = updated
-                            },
-                            modifier = Modifier.weight(0.7f)
-                        )
-
-                        HorizontalDivider(color = BorderColor, thickness = 1.dp)
-
-                        TerminalPane(modifier = Modifier.weight(0.3f))
-                    }
-                }
-                
-                StatusBar(isCompact = isCompact)
-            }
+            // Status Bar
+            StatusBar()
         }
     }
 }
 
 @Composable
-fun ActivityBar(onToggleSidebar: () -> Unit = {}) {
+fun ActivityBar() {
     Column(
         modifier = Modifier
             .width(56.dp)
@@ -166,7 +139,7 @@ fun ActivityBar(onToggleSidebar: () -> Unit = {}) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        Icon(Icons.Filled.Description, contentDescription = "Explorer", tint = TextNormal, modifier = Modifier.size(28.dp).clickable { onToggleSidebar() })
+        Icon(Icons.Filled.Description, contentDescription = "Explorer", tint = TextNormal, modifier = Modifier.size(28.dp))
         Icon(Icons.Filled.Search, contentDescription = "Search", tint = TextLineNumber, modifier = Modifier.size(28.dp))
         Icon(Icons.Filled.Code, contentDescription = "Source Control", tint = TextLineNumber, modifier = Modifier.size(28.dp))
         Icon(Icons.Filled.PlayArrow, contentDescription = "Run", tint = TextLineNumber, modifier = Modifier.size(28.dp))
@@ -176,9 +149,9 @@ fun ActivityBar(onToggleSidebar: () -> Unit = {}) {
 }
 
 @Composable
-fun Sidebar(files: List<CodeFile>, selectedFile: CodeFile, onFileSelected: (CodeFile) -> Unit, modifier: Modifier = Modifier) {
+fun Sidebar(files: List<CodeFile>, selectedFile: CodeFile, onFileSelected: (CodeFile) -> Unit) {
     Column(
-        modifier = modifier
+        modifier = Modifier
             .width(220.dp)
             .fillMaxHeight()
             .background(SidebarBackground)
@@ -322,6 +295,7 @@ fun CodeEditorPane(code: String, onCodeChange: (String) -> Unit, modifier: Modif
 fun TerminalPane(modifier: Modifier = Modifier) {
     var terminalSession by remember { mutableStateOf<TerminalSession?>(null) }
     
+    // Fake client to satisfy the API
     val client = remember {
         object : TerminalSessionClient {
             override fun onTextChanged(session: TerminalSession) {}
@@ -343,43 +317,13 @@ fun TerminalPane(modifier: Modifier = Modifier) {
         }
     }
 
-    val viewClient = remember {
-        object : com.termux.view.TerminalViewClient {
-            override fun onScale(scale: Float): Float = scale
-            override fun onSingleTapUp(e: android.view.MotionEvent) {}
-            override fun shouldBackButtonBeMappedToEscape(): Boolean = false
-            override fun shouldEnforceCharBasedInput(): Boolean = false
-            override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
-            override fun isTerminalViewSelected(): Boolean = true
-            override fun copyModeChanged(copyMode: Boolean) {}
-            override fun onKeyDown(keyCode: Int, e: android.view.KeyEvent, session: TerminalSession): Boolean = false
-            override fun onKeyUp(keyCode: Int, e: android.view.KeyEvent): Boolean = false
-            override fun onLongPress(event: android.view.MotionEvent): Boolean = false
-            override fun readControlKey(): Boolean = false
-            override fun readAltKey(): Boolean = false
-            override fun readShiftKey(): Boolean = false
-            override fun readFnKey(): Boolean = false
-            override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: TerminalSession): Boolean = false
-            override fun onEmulatorSet() {}
-            override fun logError(tag: String?, message: String?) {}
-            override fun logWarn(tag: String?, message: String?) {}
-            override fun logInfo(tag: String?, message: String?) {}
-            override fun logDebug(tag: String?, message: String?) {}
-            override fun logVerbose(tag: String?, message: String?) {}
-            override fun logStackTraceWithMessage(tag: String?, message: String?, e: Exception?) {}
-            override fun logStackTrace(tag: String?, e: Exception?) {}
-        }
-    }
-
     LaunchedEffect(Unit) {
-        try {
-            val cwd = "/"
-            val shell = "/system/bin/sh"
-            val env = arrayOf("TERM=xterm-256color")
-            terminalSession = TerminalSession(shell, cwd, arrayOf(shell), env, 1000, client)
-        } catch (e: Throwable) {
-            e.printStackTrace()
-        }
+        val cwd = "/"
+        val shell = "/system/bin/sh"
+        val env = arrayOf("TERM=xterm-256color")
+        terminalSession = TerminalSession(shell, cwd, arrayOf(shell), env, 1000, client)
+        // Note: initializing pseudo terminal with initializeEmulator() triggers JNI
+        // terminalSession?.updateSize(80, 24)
     }
 
     Column(modifier = modifier.fillMaxWidth().background(EditorBackground)) {
@@ -407,13 +351,40 @@ fun TerminalPane(modifier: Modifier = Modifier) {
             }
         }
         
+        // Terminal Content
         if (terminalSession != null) {
             androidx.compose.ui.viewinterop.AndroidView(
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 8.dp),
                 factory = { context ->
-                    com.termux.view.TerminalView(context, null).apply {
-                        setTextSize(resources.displayMetrics.scaledDensity.toInt() * 13)
-                        setTerminalViewClient(viewClient)
+                    TerminalView(context, null).apply {
+                        setTextSize((14 * context.resources.displayMetrics.scaledDensity).toInt())
+                        
+                        setTerminalViewClient(object : com.termux.view.TerminalViewClient {
+                            override fun onScale(scale: Float): Float = 1f
+                            override fun onSingleTapUp(e: android.view.MotionEvent) {}
+                            override fun shouldBackButtonBeMappedToEscape(): Boolean = false
+                            override fun shouldEnforceCharBasedInput(): Boolean = false
+                            override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
+                            override fun isTerminalViewSelected(): Boolean = true
+                            override fun copyModeChanged(copyMode: Boolean) {}
+                            override fun onKeyDown(keyCode: Int, e: android.view.KeyEvent, session: TerminalSession): Boolean = false
+                            override fun onKeyUp(keyCode: Int, e: android.view.KeyEvent): Boolean = false
+                            override fun onLongPress(event: android.view.MotionEvent): Boolean = false
+                            override fun readControlKey(): Boolean = false
+                            override fun readAltKey(): Boolean = false
+                            override fun readShiftKey(): Boolean = false
+                            override fun readFnKey(): Boolean = false
+                            override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: TerminalSession): Boolean = false
+                            override fun onEmulatorSet() {}
+                            override fun logError(tag: String?, message: String?) {}
+                            override fun logWarn(tag: String?, message: String?) {}
+                            override fun logInfo(tag: String?, message: String?) {}
+                            override fun logDebug(tag: String?, message: String?) {}
+                            override fun logVerbose(tag: String?, message: String?) {}
+                            override fun logStackTraceWithMessage(tag: String?, message: String?, e: java.lang.Exception?) {}
+                            override fun logStackTrace(tag: String?, e: java.lang.Exception?) {}
+                        })
+                        
                         attachSession(terminalSession)
                     }
                 }
@@ -425,7 +396,7 @@ fun TerminalPane(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun StatusBar(isCompact: Boolean = false) {
+fun StatusBar() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -440,12 +411,10 @@ fun StatusBar(isCompact: Boolean = false) {
             Text("main*", color = StatusBarText, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
         
-        if (!isCompact) {
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Text("UTF-8", color = StatusBarText, fontSize = 11.sp, letterSpacing = 1.sp)
-                Text("KOTLIN", color = StatusBarText, fontSize = 11.sp, letterSpacing = 1.sp)
-                Text("LAYOUT: COMPOSE", color = StatusBarText, fontSize = 11.sp, letterSpacing = 1.sp)
-            }
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Text("UTF-8", color = StatusBarText, fontSize = 11.sp, letterSpacing = 1.sp)
+            Text("KOTLIN", color = StatusBarText, fontSize = 11.sp, letterSpacing = 1.sp)
+            Text("LAYOUT: COMPOSE", color = StatusBarText, fontSize = 11.sp, letterSpacing = 1.sp)
         }
     }
 }
