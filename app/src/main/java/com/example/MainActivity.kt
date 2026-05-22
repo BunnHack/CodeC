@@ -32,6 +32,10 @@ import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
@@ -345,10 +349,19 @@ fun EditorTabs(selectedFile: CodeFile) {
 
 @Composable
 fun CodeEditorPane(code: String, onCodeChange: (String) -> Unit, modifier: Modifier = Modifier) {
+    val focusRequester = remember { FocusRequester() }
+    val interactionSource = remember { MutableInteractionSource() }
+
     Box(
         modifier = modifier
             .fillMaxSize()
             .background(EditorBackground)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null
+            ) {
+                focusRequester.requestFocus()
+            }
     ) {
         val scrollState = rememberScrollState()
         
@@ -388,7 +401,10 @@ fun CodeEditorPane(code: String, onCodeChange: (String) -> Unit, modifier: Modif
                 ),
                 cursorBrush = SolidColor(TextNormal),
                 visualTransformation = SyntaxHighlightTransformation(),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusRequester(focusRequester)
+                    .focusable()
             )
         }
     }
@@ -463,11 +479,17 @@ fun TerminalPane(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 8.dp),
                 factory = { context ->
                     TerminalView(context, null).apply {
+                        isFocusable = true
+                        isFocusableInTouchMode = true
                         setTextSize((14 * context.resources.displayMetrics.scaledDensity).toInt())
                         
                         setTerminalViewClient(object : com.termux.view.TerminalViewClient {
                             override fun onScale(scale: Float): Float = 1f
-                            override fun onSingleTapUp(e: android.view.MotionEvent) {}
+                            override fun onSingleTapUp(e: android.view.MotionEvent) {
+                                this@apply.requestFocus()
+                                val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
+                                imm?.showSoftInput(this@apply, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+                            }
                             override fun shouldBackButtonBeMappedToEscape(): Boolean = false
                             override fun shouldEnforceCharBasedInput(): Boolean = false
                             override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
@@ -492,6 +514,9 @@ fun TerminalPane(modifier: Modifier = Modifier) {
                         })
                         
                         attachSession(terminalSession)
+                        post {
+                            updateSize()
+                        }
                     }
                 }
             )
