@@ -34,6 +34,10 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import com.example.ui.home.HomeScreen
 import com.example.ui.theme.*
 import com.termux.view.TerminalView
 import com.termux.terminal.TerminalSession
@@ -68,12 +72,30 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                Scaffold(
-                    modifier = Modifier.fillMaxSize(),
-                    containerColor = ActivityBarBackground,
-                    contentWindowInsets = WindowInsets.safeDrawing
-                ) { innerPadding ->
-                    CodeEditorApp(modifier = Modifier.padding(innerPadding))
+                val navController = rememberNavController()
+                
+                NavHost(navController = navController, startDestination = "home") {
+                    composable("home") {
+                        HomeScreen(
+                            onNavigateToEditor = { projectId ->
+                                navController.navigate("editor/$projectId")
+                            }
+                        )
+                    }
+                    composable("editor/{projectId}") { backStackEntry ->
+                        val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
+                        Scaffold(
+                            modifier = Modifier.fillMaxSize(),
+                            containerColor = ActivityBarBackground,
+                            contentWindowInsets = WindowInsets.safeDrawing
+                        ) { innerPadding ->
+                            CodeEditorApp(
+                                projectId = projectId,
+                                onBack = { navController.popBackStack() },
+                                modifier = Modifier.padding(innerPadding)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -81,13 +103,13 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-fun CodeEditorApp(modifier: Modifier = Modifier) {
+fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
     var selectedFile by remember { mutableStateOf(INITIAL_FILES[1]) }
     var fileContents by remember { mutableStateOf(INITIAL_FILES.associate { it.name to it.content }.toMutableMap()) }
 
     Row(modifier = modifier.fillMaxSize()) {
         // Activity Bar (Far Left)
-        ActivityBar()
+        ActivityBar(onBack = onBack)
 
         // Explorer Sidebar
         Sidebar(
@@ -129,7 +151,7 @@ fun CodeEditorApp(modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun ActivityBar() {
+fun ActivityBar(onBack: () -> Unit) {
     Column(
         modifier = Modifier
             .width(56.dp)
@@ -139,6 +161,7 @@ fun ActivityBar() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
+        Icon(Icons.Filled.ArrowBack, contentDescription = "Back", tint = TextNormal, modifier = Modifier.size(28.dp).clickable(onClick = onBack))
         Icon(Icons.Filled.Description, contentDescription = "Explorer", tint = TextNormal, modifier = Modifier.size(28.dp))
         Icon(Icons.Filled.Search, contentDescription = "Search", tint = TextLineNumber, modifier = Modifier.size(28.dp))
         Icon(Icons.Filled.Code, contentDescription = "Source Control", tint = TextLineNumber, modifier = Modifier.size(28.dp))
@@ -428,10 +451,11 @@ fun StatusBar() {
                                 log.append(line).append("\n")
                                 line = bufferedReader.readLine()
                             }
+                            Runtime.getRuntime().exec("logcat -c")
                             val downloadsDir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
                             val debugFile = java.io.File(downloadsDir, "CodeEditor_DebugLog_${System.currentTimeMillis()}.txt")
                             debugFile.writeText(log.toString())
-                            android.widget.Toast.makeText(context, "Debug log saved to Downloads", android.widget.Toast.LENGTH_SHORT).show()
+                            android.widget.Toast.makeText(context, "Debug log saved to Downloads. Log cleared.", android.widget.Toast.LENGTH_SHORT).show()
                         } catch (e: Exception) {
                             e.printStackTrace()
                             android.widget.Toast.makeText(context, "Failed to save log", android.widget.Toast.LENGTH_SHORT).show()

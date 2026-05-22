@@ -87,7 +87,7 @@ dependencies {
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)
-  // implementation(libs.androidx.navigation.compose)
+  implementation(libs.androidx.navigation.compose)
 
   implementation("com.github.termux.termux-app:terminal-view:v0.118.0")
   implementation("com.github.termux.termux-app:terminal-emulator:v0.118.0")
