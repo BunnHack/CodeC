@@ -413,18 +413,23 @@ fun CodeEditorPane(code: String, onCodeChange: (String) -> Unit, modifier: Modif
 @Composable
 fun TerminalPane(modifier: Modifier = Modifier) {
     var terminalSession by remember { mutableStateOf<TerminalSession?>(null) }
+    var terminalView by remember { mutableStateOf<TerminalView?>(null) }
     
     // Fake client to satisfy the API
     val client = remember {
         object : TerminalSessionClient {
-            override fun onTextChanged(session: TerminalSession) {}
+            override fun onTextChanged(session: TerminalSession) {
+                terminalView?.onScreenUpdated()
+            }
             override fun onTitleChanged(session: TerminalSession) {}
             override fun onSessionFinished(session: TerminalSession) {}
             override fun onCopyTextToClipboard(session: TerminalSession, text: String) {}
             override fun onPasteTextFromClipboard(session: TerminalSession) {}
             override fun onBell(session: TerminalSession) {}
             override fun onColorsChanged(session: TerminalSession) {}
-            override fun onTerminalCursorStateChange(state: Boolean) {}
+            override fun onTerminalCursorStateChange(state: Boolean) {
+                terminalView?.setTerminalCursorBlinkerState(state, false)
+            }
             override fun getTerminalCursorStyle(): Int = 0
             override fun logError(tag: String?, message: String?) {}
             override fun logWarn(tag: String?, message: String?) {}
@@ -479,6 +484,7 @@ fun TerminalPane(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 8.dp),
                 factory = { context ->
                     TerminalView(context, null).apply {
+                        terminalView = this
                         isFocusable = true
                         isFocusableInTouchMode = true
                         setTextSize((14 * context.resources.displayMetrics.scaledDensity).toInt())
