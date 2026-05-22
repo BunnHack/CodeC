@@ -37,6 +37,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.launch
 import com.example.ui.home.HomeScreen
 import com.example.ui.theme.*
 import com.termux.view.TerminalView
@@ -102,50 +103,129 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
     var selectedFile by remember { mutableStateOf(INITIAL_FILES[1]) }
     var fileContents by remember { mutableStateOf(INITIAL_FILES.associate { it.name to it.content }.toMutableMap()) }
 
-    Row(modifier = modifier.fillMaxSize()) {
-        // Activity Bar (Far Left)
-        ActivityBar(onBack = onBack)
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val isCompact = maxWidth < 600.dp
+        
+        if (isCompact) {
+            val drawerState = rememberDrawerState(DrawerValue.Closed)
+            val scope = rememberCoroutineScope()
 
-        // Explorer Sidebar
-        Sidebar(
-            files = INITIAL_FILES,
-            selectedFile = selectedFile,
-            onFileSelected = { selectedFile = it }
-        )
-        VerticalDivider(color = BorderColor, thickness = 1.dp)
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    ModalDrawerSheet(
+                        drawerContainerColor = SidebarBackground, // Sidebar background
+                        modifier = Modifier.width(280.dp),
+                        windowInsets = WindowInsets(0)
+                    ) {
+                        Row(modifier = Modifier.fillMaxHeight()) {
+                            ActivityBar(onBack = onBack)
+                            Sidebar(
+                                files = INITIAL_FILES,
+                                selectedFile = selectedFile,
+                                onFileSelected = {
+                                    selectedFile = it
+                                    scope.launch { drawerState.close() }
+                                }
+                            )
+                        }
+                    }
+                }
+            ) {
+                // Main Editor Area
+                Column(modifier = Modifier.fillMaxSize().background(EditorBackground)) {
+                    // Mobile Top Bar
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(SidebarBackground)
+                            .padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
+                            Icon(Icons.Filled.Menu, "Menu", tint = TextNormal)
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Filled.Description,
+                            contentDescription = null,
+                            tint = TextKeyword,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(selectedFile.name, color = TextNormal, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
 
-        // Main Editor Area
-        Column(modifier = Modifier
-            .weight(1f)
-            .background(EditorBackground)) {
-            // Tabs Row
-            EditorTabs(selectedFile = selectedFile)
+                    Column(modifier = Modifier.weight(1f)) {
+                        // Editor Input
+                        CodeEditorPane(
+                            code = fileContents[selectedFile.name] ?: "",
+                            onCodeChange = { newCode ->
+                                val updated = fileContents.toMutableMap()
+                                updated[selectedFile.name] = newCode
+                                fileContents = updated
+                            },
+                            modifier = Modifier.weight(0.6f)
+                        )
 
-            Column(modifier = Modifier.weight(1f)) {
-                // Editor Input
-                CodeEditorPane(
-                    code = fileContents[selectedFile.name] ?: "",
-                    onCodeChange = { newCode ->
-                        val updated = fileContents.toMutableMap()
-                        updated[selectedFile.name] = newCode
-                        fileContents = updated
-                    },
-                    modifier = Modifier.weight(0.7f)
-                )
+                        HorizontalDivider(color = BorderColor, thickness = 1.dp)
 
-                HorizontalDivider(color = BorderColor, thickness = 1.dp)
+                        // Terminal Pane
+                        TerminalPane(modifier = Modifier.weight(0.4f))
+                    }
 
-                // Terminal Pane
-                TerminalPane(modifier = Modifier.weight(0.3f))
+                    // Status Bar
+                    StatusBar()
+                }
             }
+        } else {
+            Row(modifier = Modifier.fillMaxSize()) {
+                // Activity Bar (Far Left)
+                ActivityBar(onBack = onBack)
 
-            // Status Bar
-            StatusBar()
+                // Explorer Sidebar
+                Sidebar(
+                    files = INITIAL_FILES,
+                    selectedFile = selectedFile,
+                    onFileSelected = { selectedFile = it }
+                )
+                VerticalDivider(color = BorderColor, thickness = 1.dp)
+
+                // Main Editor Area
+                Column(modifier = Modifier
+                    .weight(1f)
+                    .background(EditorBackground)) {
+                    // Tabs Row
+                    EditorTabs(selectedFile = selectedFile)
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        // Editor Input
+                        CodeEditorPane(
+                            code = fileContents[selectedFile.name] ?: "",
+                            onCodeChange = { newCode ->
+                                val updated = fileContents.toMutableMap()
+                                updated[selectedFile.name] = newCode
+                                fileContents = updated
+                            },
+                            modifier = Modifier.weight(0.7f)
+                        )
+
+                        HorizontalDivider(color = BorderColor, thickness = 1.dp)
+
+                        // Terminal Pane
+                        TerminalPane(modifier = Modifier.weight(0.3f))
+                    }
+
+                    // Status Bar
+                    StatusBar()
+                }
+            }
         }
     }
 }
