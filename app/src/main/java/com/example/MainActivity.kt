@@ -143,7 +143,7 @@ fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Mo
                 }
             ) {
                 // Main Editor Area
-                Column(modifier = Modifier.fillMaxSize().background(EditorBackground)) {
+                Column(modifier = Modifier.fillMaxSize().background(EditorBackground).imePadding()) {
                     // Mobile Top Bar
                     Row(
                         modifier = Modifier
@@ -204,7 +204,8 @@ fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Mo
                 // Main Editor Area
                 Column(modifier = Modifier
                     .weight(1f)
-                    .background(EditorBackground)) {
+                    .background(EditorBackground)
+                    .imePadding()) {
                     // Tabs Row
                     EditorTabs(selectedFile = selectedFile)
 
@@ -419,7 +420,9 @@ fun TerminalPane(modifier: Modifier = Modifier) {
     val client = remember {
         object : TerminalSessionClient {
             override fun onTextChanged(session: TerminalSession) {
-                terminalView?.onScreenUpdated()
+                terminalView?.post {
+                    terminalView?.onScreenUpdated()
+                }
             }
             override fun onTitleChanged(session: TerminalSession) {}
             override fun onSessionFinished(session: TerminalSession) {}
@@ -428,7 +431,9 @@ fun TerminalPane(modifier: Modifier = Modifier) {
             override fun onBell(session: TerminalSession) {}
             override fun onColorsChanged(session: TerminalSession) {}
             override fun onTerminalCursorStateChange(state: Boolean) {
-                terminalView?.setTerminalCursorBlinkerState(state, false)
+                terminalView?.post {
+                    terminalView?.setTerminalCursorBlinkerState(state, false)
+                }
             }
             override fun getTerminalCursorStyle(): Int = 0
             override fun logError(tag: String?, message: String?) {}
