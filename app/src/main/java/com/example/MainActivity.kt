@@ -340,13 +340,16 @@ fun TerminalPane(modifier: Modifier = Modifier) {
         }
     }
 
-    LaunchedEffect(Unit) {
+    DisposableEffect(Unit) {
         val cwd = "/"
         val shell = "/system/bin/sh"
         val env = arrayOf("TERM=xterm-256color")
-        terminalSession = TerminalSession(shell, cwd, arrayOf(shell), env, 1000, client)
-        // Note: initializing pseudo terminal with initializeEmulator() triggers JNI
-        // terminalSession?.updateSize(80, 24)
+        val session = TerminalSession(shell, cwd, arrayOf(shell), env, 1000, client)
+        terminalSession = session
+        
+        onDispose {
+            session.finishIfRunning()
+        }
     }
 
     Column(modifier = modifier.fillMaxWidth().background(EditorBackground)) {
