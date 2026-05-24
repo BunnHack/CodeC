@@ -164,6 +164,10 @@ fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Mo
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(selectedFile.name, color = TextNormal, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.weight(1f))
+                        IconButton(onClick = {}) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = "Run", tint = TextLineNumber)
+                        }
                     }
 
                     Column(modifier = Modifier.weight(1f)) {
@@ -249,7 +253,6 @@ fun ActivityBar(onBack: () -> Unit) {
         Icon(Icons.Filled.Description, contentDescription = "Explorer", tint = TextNormal, modifier = Modifier.size(28.dp))
         Icon(Icons.Filled.Search, contentDescription = "Search", tint = TextLineNumber, modifier = Modifier.size(28.dp))
         Icon(Icons.Filled.Code, contentDescription = "Source Control", tint = TextLineNumber, modifier = Modifier.size(28.dp))
-        Icon(Icons.Filled.PlayArrow, contentDescription = "Run", tint = TextLineNumber, modifier = Modifier.size(28.dp))
         Spacer(modifier = Modifier.weight(1f))
         Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = TextLineNumber, modifier = Modifier.size(28.dp))
     }
@@ -263,13 +266,34 @@ fun Sidebar(files: List<CodeFile>, selectedFile: CodeFile, onFileSelected: (Code
             .fillMaxHeight()
             .background(SidebarBackground)
     ) {
-        Text(
-            text = "EXPLORER",
-            color = TextLineNumber,
-            fontSize = 12.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(16.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "EXPLORER",
+                color = TextLineNumber,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Add,
+                    contentDescription = "New File",
+                    tint = TextLineNumber,
+                    modifier = Modifier.size(16.dp).clickable {}
+                )
+                Icon(
+                    imageVector = Icons.Filled.CreateNewFolder,
+                    contentDescription = "New Folder",
+                    tint = TextLineNumber,
+                    modifier = Modifier.size(16.dp).clickable {}
+                )
+            }
+        }
 
         LazyColumn {
             items(files) { file ->
@@ -308,7 +332,8 @@ fun EditorTabs(selectedFile: CodeFile) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(SidebarBackground)
+                .background(SidebarBackground),
+            verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
                 modifier = Modifier
@@ -341,6 +366,10 @@ fun EditorTabs(selectedFile: CodeFile) {
                         modifier = Modifier.size(14.dp)
                     )
                 }
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(onClick = {}) {
+                Icon(Icons.Filled.PlayArrow, contentDescription = "Run", tint = TextLineNumber)
             }
         }
         HorizontalDivider(color = BorderColor, thickness = 1.dp)
