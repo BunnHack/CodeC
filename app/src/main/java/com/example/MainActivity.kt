@@ -38,6 +38,16 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.ui.platform.LocalContext
+import android.content.ClipboardManager
+import android.content.ClipData
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.widget.Toast
+import com.example.db.AppDatabase
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.NavHost
@@ -64,10 +74,20 @@ enum class PreviewViewportMode {
 
 @Composable
 fun WebPreviewDialog(fileContents: Map<String, String>, onDismiss: () -> Unit) {
+    val context = LocalContext.current
     val isWebProject = fileContents.containsKey("index.html")
     var viewportMode by remember { mutableStateOf(PreviewViewportMode.DESKTOP) }
     var menuExpanded by remember { mutableStateOf(false) }
     var refreshTrigger by remember { mutableStateOf(0) }
+
+    val combinedHtml = remember(fileContents, refreshTrigger) {
+        val htmlContent = fileContents["index.html"] ?: ""
+        val cssContent = fileContents["styles.css"] ?: ""
+        val jsContent = fileContents["app.js"] ?: ""
+        htmlContent
+            .replace("<link rel=\"stylesheet\" href=\"styles.css\">", "<style>\n$cssContent\n</style>")
+            .replace("<script src=\"app.js\"></script>", "<script>\n$jsContent\n</script>")
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -242,6 +262,29 @@ fun WebPreviewDialog(fileContents: Map<String, String>, onDismiss: () -> Unit) {
                                     menuExpanded = false
                                 }
                             )
+                            DropdownMenuItem(
+                                text = { Text("Open in Browser", color = TextNormal) },
+                                leadingIcon = { Icon(imageVector = Icons.Filled.OpenInNew, contentDescription = null, tint = TextMuted) },
+                                onClick = {
+                                    menuExpanded = false
+                                    try {
+                                        val builder = android.os.StrictMode.VmPolicy.Builder()
+                                        android.os.StrictMode.setVmPolicy(builder.build())
+                                        
+                                        val file = java.io.File(context.externalCacheDir ?: context.cacheDir, "web_preview.html")
+                                        file.writeText(combinedHtml)
+                                        
+                                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                            setDataAndType(android.net.Uri.fromFile(file), "text/html")
+                                            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Could not open in browser: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            )
                         }
                     }
                 }
@@ -249,16 +292,6 @@ fun WebPreviewDialog(fileContents: Map<String, String>, onDismiss: () -> Unit) {
                 HorizontalDivider(color = BorderColor)
                 
                 if (isWebProject) {
-                    val htmlContent = fileContents["index.html"] ?: ""
-                    val cssContent = fileContents["styles.css"] ?: ""
-                    val jsContent = fileContents["app.js"] ?: ""
-                    
-                    val combinedHtml = remember(htmlContent, cssContent, jsContent, refreshTrigger) {
-                        htmlContent
-                            .replace("<link rel=\"stylesheet\" href=\"styles.css\">", "<style>\n$cssContent\n</style>")
-                            .replace("<script src=\"app.js\"></script>", "<script>\n$jsContent\n</script>")
-                    }
-                    
                     var webViewRef by remember { mutableStateOf<WebView?>(null) }
 
                     // We need a styled wrapper box centered on screen if we are in mobile mode
@@ -424,6 +457,75 @@ fun CodeEditorApp(projectId: String, template: String, onBack: () -> Unit, modif
         mutableStateOf(initialFiles.associate { it.name to it.content }.toMutableMap())
     }
 
+    val context = LocalContext.current
+    var projectName by remember { mutableStateOf("Project") }
+    LaunchedEffect(projectId) {
+        try {
+            val db = AppDatabase.getDatabase(context)
+            db.projectDao().getAllProjects().collect { projects ->
+                projects.find { it.id == projectId }?.let {
+                    projectName = it.name
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    val onDeleteFile: (CodeFile) -> Unit = { file ->
+        filesList = filesList.filter { it != file }
+        val updatedContents = fileContents.toMutableMap()
+        updatedContents.remove(file.name)
+        fileContents = updatedContents
+        if (selectedFile == file) {
+            selectedFile = filesList.firstOrNull { !it.isFolder } ?: CodeFile("README.md", "", false)
+        }
+    }
+
+    val onRenameFile: (CodeFile, String) -> Unit = { file, newName ->
+        if (newName.isNotBlank() && file.name != newName) {
+            val oldName = file.name
+            filesList = filesList.map {
+                if (it == file) it.copy(name = newName) else it
+            }
+            val updatedContents = fileContents.toMutableMap()
+            val previousContent = updatedContents.remove(oldName) ?: file.content
+            updatedContents[newName] = previousContent
+            fileContents = updatedContents
+            if (selectedFile.name == oldName) {
+                selectedFile = selectedFile.copy(name = newName, content = previousContent)
+            }
+        }
+    }
+
+    val onDownloadFile: (CodeFile) -> Unit = { file ->
+        try {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val content = fileContents[file.name] ?: file.content
+            val clip = ClipData.newPlainText("Downloaded Code", content)
+            clipboard.setPrimaryClip(clip)
+            
+            val intent = Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_SUBJECT, file.name)
+                putExtra(Intent.EXTRA_TEXT, content)
+            }
+            context.startActivity(Intent.createChooser(intent, "Download / Share ${file.name}"))
+            
+            Toast.makeText(context, "${file.name} copied to clipboard & share sheet opened!", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(context, "Error sharing file: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val onCopyPath: (CodeFile) -> Unit = { file ->
+        val path = "/storage/emulated/0/Documents/CodeEditor/$projectName/${file.name}"
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText("File Path", path)
+        clipboard.setPrimaryClip(clip)
+        Toast.makeText(context, "Copied Path: $path", Toast.LENGTH_SHORT).show()
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isCompact = maxWidth < 600.dp
         
@@ -463,7 +565,11 @@ fun CodeEditorApp(projectId: String, template: String, onBack: () -> Unit, modif
                                         val newFolder = CodeFile(name, "", isFolder = true)
                                         filesList = filesList + newFolder
                                     }
-                                }
+                                },
+                                onDeleteFile = onDeleteFile,
+                                onRenameFile = onRenameFile,
+                                onDownloadFile = onDownloadFile,
+                                onCopyPath = onCopyPath
                             )
                         }
                     }
@@ -544,7 +650,11 @@ fun CodeEditorApp(projectId: String, template: String, onBack: () -> Unit, modif
                             val newFolder = CodeFile(name, "", isFolder = true)
                             filesList = filesList + newFolder
                         }
-                    }
+                    },
+                    onDeleteFile = onDeleteFile,
+                    onRenameFile = onRenameFile,
+                    onDownloadFile = onDownloadFile,
+                    onCopyPath = onCopyPath
                 )
                 VerticalDivider(color = BorderColor, thickness = 1.dp)
 
@@ -608,17 +718,27 @@ fun ActivityBar(onBack: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun Sidebar(
     files: List<CodeFile>,
     selectedFile: CodeFile,
     onFileSelected: (CodeFile) -> Unit,
     onCreateFile: (String) -> Unit,
-    onCreateFolder: (String) -> Unit
+    onCreateFolder: (String) -> Unit,
+    onDeleteFile: (CodeFile) -> Unit,
+    onRenameFile: (CodeFile, String) -> Unit,
+    onDownloadFile: (CodeFile) -> Unit,
+    onCopyPath: (CodeFile) -> Unit
 ) {
     var showCreateFileDialog by remember { mutableStateOf(false) }
     var showCreateFolderDialog by remember { mutableStateOf(false) }
     var inputName by remember { mutableStateOf("") }
+
+    var selectedFileForMenu by remember { mutableStateOf<CodeFile?>(null) }
+    var showRenameDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var renameNameInput by remember { mutableStateOf("") }
 
     if (showCreateFileDialog) {
         AlertDialog(
@@ -690,6 +810,68 @@ fun Sidebar(
         )
     }
 
+    if (showRenameDialog && selectedFileForMenu != null) {
+        val file = selectedFileForMenu!!
+        AlertDialog(
+            onDismissRequest = { showRenameDialog = false },
+            title = { Text(if (file.isFolder) "Rename Folder" else "Rename File") },
+            text = {
+                OutlinedTextField(
+                    value = renameNameInput,
+                    onValueChange = { renameNameInput = it },
+                    label = { Text("Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (renameNameInput.isNotBlank()) {
+                            onRenameFile(file, renameNameInput.trim())
+                            showRenameDialog = false
+                        }
+                    },
+                    enabled = renameNameInput.isNotBlank()
+                ) {
+                    Text("Rename")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRenameDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showDeleteDialog && selectedFileForMenu != null) {
+        val file = selectedFileForMenu!!
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text(if (file.isFolder) "Delete Folder" else "Delete File") },
+            text = {
+                Text("Are you sure you want to delete '${file.name}'? This action is permanent.")
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onDeleteFile(file)
+                        showDeleteDialog = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF5252))
+                ) {
+                    Text("Delete", color = Color.White)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .width(220.dp)
@@ -732,28 +914,83 @@ fun Sidebar(
         LazyColumn {
             items(files) { file ->
                 val isSelected = file == selectedFile
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { if (!file.isFolder) onFileSelected(file) }
-                        .background(if (isSelected && !file.isFolder) TabActiveBackground else Color.Transparent)
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = if (file.isFolder) Icons.Filled.KeyboardArrowDown else Icons.Filled.Description,
-                        contentDescription = null,
-                        tint = if (file.isFolder) TextNormal else TextKeyword,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = file.name,
-                        color = if (isSelected && !file.isFolder) Color.White else TextNormal,
-                        fontSize = 14.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                var showContextMenu by remember { mutableStateOf(false) }
+                
+                Box {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onLongClick = {
+                                    showContextMenu = true
+                                },
+                                onClick = {
+                                    if (!file.isFolder) onFileSelected(file)
+                                }
+                            )
+                            .background(if (isSelected && !file.isFolder) TabActiveBackground else Color.Transparent)
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (file.isFolder) Icons.Filled.KeyboardArrowDown else Icons.Filled.Description,
+                            contentDescription = null,
+                            tint = if (file.isFolder) TextNormal else TextKeyword,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = file.name,
+                            color = if (isSelected && !file.isFolder) Color.White else TextNormal,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showContextMenu,
+                        onDismissRequest = { showContextMenu = false },
+                        modifier = Modifier.background(SidebarBackground)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Rename", color = TextNormal) },
+                            leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null, tint = TextMuted) },
+                            onClick = {
+                                showContextMenu = false
+                                selectedFileForMenu = file
+                                renameNameInput = file.name
+                                showRenameDialog = true
+                            }
+                        )
+                        if (!file.isFolder) {
+                            DropdownMenuItem(
+                                text = { Text("Download", color = TextNormal) },
+                                leadingIcon = { Icon(Icons.Filled.Download, contentDescription = null, tint = TextMuted) },
+                                onClick = {
+                                    showContextMenu = false
+                                    onDownloadFile(file)
+                                }
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Copy Path", color = TextNormal) },
+                            leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = TextMuted) },
+                            onClick = {
+                                showContextMenu = false
+                                onCopyPath(file)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete", color = Color(0xFFFF5252)) },
+                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = Color(0xFFFF5252)) },
+                            onClick = {
+                                showContextMenu = false
+                                selectedFileForMenu = file
+                                showDeleteDialog = true
+                            }
+                        )
+                    }
                 }
             }
         }
