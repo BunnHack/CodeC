@@ -427,6 +427,8 @@ fun TerminalPane(modifier: Modifier = Modifier) {
             onFinished = { }
         )
         coordinator.start(sessionClient)
+        terminalViewRef?.let { coordinator.attach(it, requestFocus = false) }
+        
         onDispose { coordinator.stop() }
     }
 
@@ -463,21 +465,19 @@ fun TerminalPane(modifier: Modifier = Modifier) {
                     isFocusable = true
                     isFocusableInTouchMode = true
                     keepScreenOn = true
-                    val colorBlack = android.graphics.Color.BLACK
-                    setBackgroundColor(colorBlack)
+                    setBackgroundColor(android.graphics.Color.BLACK)
                     setTextSize((14 * ctx.resources.displayMetrics.scaledDensity).toInt())
 
                     val client = com.example.terminal.AppTerminalViewClient(activity, this)
                     setTerminalViewClient(client)
 
                     coordinator.attach(this)
-                    requestFocus()
                     terminalViewRef = this
                 }
             },
             update = { view ->
-                coordinator.attach(view)
-                terminalViewRef = view
+                // Called on recompose. Safely attach session if not already attached
+                coordinator.attach(view, requestFocus = false)
             }
         )
     }

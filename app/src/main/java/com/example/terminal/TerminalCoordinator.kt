@@ -23,11 +23,13 @@ class TerminalCoordinator(
         )
     }
 
-    fun attach(view: TerminalView) {
+    fun attach(view: TerminalView, requestFocus: Boolean = true) {
         session?.let {
             view.attachSession(it)
             view.onScreenUpdated()
-            view.requestFocus()
+            if (requestFocus) {
+                view.requestFocus()
+            }
         }
     }
 

@@ -21,12 +21,19 @@ class AppTerminalViewClient(
         imm.showSoftInput(terminalView, InputMethodManager.SHOW_IMPLICIT)
     }
 
-    override fun onKeyDown(keyCode: Int, e: KeyEvent?, session: TerminalSession?): Boolean = false
+    override fun onKeyDown(keyCode: Int, e: KeyEvent?, session: TerminalSession?): Boolean {
+        if (keyCode == KeyEvent.KEYCODE_ENTER && e?.action == KeyEvent.ACTION_DOWN) {
+            session?.write("\r")
+            return true
+        }
+        return false
+    }
+    
     override fun onKeyUp(keyCode: Int, e: KeyEvent?): Boolean = false
     override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: TerminalSession?): Boolean = false
 
     override fun shouldBackButtonBeMappedToEscape() = false
-    override fun shouldEnforceCharBasedInput() = false
+    override fun shouldEnforceCharBasedInput() = true
     override fun shouldUseCtrlSpaceWorkaround() = false
     override fun isTerminalViewSelected() = true
     override fun copyModeChanged(copyMode: Boolean) {}
