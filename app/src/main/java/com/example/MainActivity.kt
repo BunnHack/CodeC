@@ -143,7 +143,7 @@ fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Mo
                 }
             ) {
                 // Main Editor Area
-                Column(modifier = Modifier.fillMaxSize().background(EditorBackground).imePadding()) {
+                Column(modifier = Modifier.fillMaxSize().background(EditorBackground)) {
                     // Mobile Top Bar
                     Row(
                         modifier = Modifier
@@ -204,8 +204,7 @@ fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Mo
                 // Main Editor Area
                 Column(modifier = Modifier
                     .weight(1f)
-                    .background(EditorBackground)
-                    .imePadding()) {
+                    .background(EditorBackground)) {
                     // Tabs Row
                     EditorTabs(selectedFile = selectedFile)
 
@@ -413,49 +412,22 @@ fun CodeEditorPane(code: String, onCodeChange: (String) -> Unit, modifier: Modif
 
 @Composable
 fun TerminalPane(modifier: Modifier = Modifier) {
-    var terminalSession by remember { mutableStateOf<TerminalSession?>(null) }
-    var terminalView by remember { mutableStateOf<TerminalView?>(null) }
-    
-    // Fake client to satisfy the API
-    val client = remember {
-        object : TerminalSessionClient {
-            override fun onTextChanged(session: TerminalSession) {
-                terminalView?.post {
-                    terminalView?.onScreenUpdated()
-                }
-            }
-            override fun onTitleChanged(session: TerminalSession) {}
-            override fun onSessionFinished(session: TerminalSession) {}
-            override fun onCopyTextToClipboard(session: TerminalSession, text: String) {}
-            override fun onPasteTextFromClipboard(session: TerminalSession) {}
-            override fun onBell(session: TerminalSession) {}
-            override fun onColorsChanged(session: TerminalSession) {}
-            override fun onTerminalCursorStateChange(state: Boolean) {
-                terminalView?.post {
-                    terminalView?.setTerminalCursorBlinkerState(state, false)
-                }
-            }
-            override fun getTerminalCursorStyle(): Int = 0
-            override fun logError(tag: String?, message: String?) {}
-            override fun logWarn(tag: String?, message: String?) {}
-            override fun logInfo(tag: String?, message: String?) {}
-            override fun logDebug(tag: String?, message: String?) {}
-            override fun logVerbose(tag: String?, message: String?) {}
-            override fun logStackTraceWithMessage(tag: String?, message: String?, e: Exception?) {}
-            override fun logStackTrace(tag: String?, e: Exception?) {}
-        }
-    }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = context as android.app.Activity
+    val coordinator = remember { com.example.terminal.TerminalCoordinator(context) }
+    var terminalViewRef by remember { mutableStateOf<TerminalView?>(null) }
 
     DisposableEffect(Unit) {
-        val cwd = "/"
-        val shell = "/system/bin/sh"
-        val env = arrayOf("TERM=xterm-256color")
-        val session = TerminalSession(shell, cwd, arrayOf(shell), env, 1000, client)
-        terminalSession = session
-        
-        onDispose {
-            session.finishIfRunning()
-        }
+        val sessionClient = com.example.terminal.AppTerminalSessionClient(
+            onRefresh = { 
+                terminalViewRef?.post { 
+                    terminalViewRef?.onScreenUpdated() 
+                } 
+            },
+            onFinished = { }
+        )
+        coordinator.start(sessionClient)
+        onDispose { coordinator.stop() }
     }
 
     Column(modifier = modifier.fillMaxWidth().background(EditorBackground)) {
@@ -484,56 +456,30 @@ fun TerminalPane(modifier: Modifier = Modifier) {
         }
         
         // Terminal Content
-        if (terminalSession != null) {
-            androidx.compose.ui.viewinterop.AndroidView(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 8.dp),
-                factory = { context ->
-                    TerminalView(context, null).apply {
-                        terminalView = this
-                        isFocusable = true
-                        isFocusableInTouchMode = true
-                        setTextSize((14 * context.resources.displayMetrics.scaledDensity).toInt())
-                        
-                        setTerminalViewClient(object : com.termux.view.TerminalViewClient {
-                            override fun onScale(scale: Float): Float = 1f
-                            override fun onSingleTapUp(e: android.view.MotionEvent) {
-                                this@apply.requestFocus()
-                                val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) as? android.view.inputmethod.InputMethodManager
-                                imm?.showSoftInput(this@apply, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
-                            }
-                            override fun shouldBackButtonBeMappedToEscape(): Boolean = false
-                            override fun shouldEnforceCharBasedInput(): Boolean = false
-                            override fun shouldUseCtrlSpaceWorkaround(): Boolean = false
-                            override fun isTerminalViewSelected(): Boolean = true
-                            override fun copyModeChanged(copyMode: Boolean) {}
-                            override fun onKeyDown(keyCode: Int, e: android.view.KeyEvent, session: TerminalSession): Boolean = false
-                            override fun onKeyUp(keyCode: Int, e: android.view.KeyEvent): Boolean = false
-                            override fun onLongPress(event: android.view.MotionEvent): Boolean = false
-                            override fun readControlKey(): Boolean = false
-                            override fun readAltKey(): Boolean = false
-                            override fun readShiftKey(): Boolean = false
-                            override fun readFnKey(): Boolean = false
-                            override fun onCodePoint(codePoint: Int, ctrlDown: Boolean, session: TerminalSession): Boolean = false
-                            override fun onEmulatorSet() {}
-                            override fun logError(tag: String?, message: String?) {}
-                            override fun logWarn(tag: String?, message: String?) {}
-                            override fun logInfo(tag: String?, message: String?) {}
-                            override fun logDebug(tag: String?, message: String?) {}
-                            override fun logVerbose(tag: String?, message: String?) {}
-                            override fun logStackTraceWithMessage(tag: String?, message: String?, e: java.lang.Exception?) {}
-                            override fun logStackTrace(tag: String?, e: java.lang.Exception?) {}
-                        })
-                        
-                        attachSession(terminalSession)
-                        post {
-                            updateSize()
-                        }
-                    }
+        androidx.compose.ui.viewinterop.AndroidView(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp).padding(bottom = 8.dp),
+            factory = { ctx ->
+                TerminalView(ctx, null).apply {
+                    isFocusable = true
+                    isFocusableInTouchMode = true
+                    keepScreenOn = true
+                    val colorBlack = android.graphics.Color.BLACK
+                    setBackgroundColor(colorBlack)
+                    setTextSize((14 * ctx.resources.displayMetrics.scaledDensity).toInt())
+
+                    val client = com.example.terminal.AppTerminalViewClient(activity, this)
+                    setTerminalViewClient(client)
+
+                    coordinator.attach(this)
+                    requestFocus()
+                    terminalViewRef = this
                 }
-            )
-        } else {
-            Box(modifier = Modifier.fillMaxSize()) // Loading
-        }
+            },
+            update = { view ->
+                coordinator.attach(view)
+                terminalViewRef = view
+            }
+        )
     }
 }
 
