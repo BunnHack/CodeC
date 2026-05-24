@@ -27,14 +27,15 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun createNewProject(name: String, onCreated: (String) -> Unit) {
+    fun createNewProject(name: String, template: String, onCreated: (String) -> Unit) {
         viewModelScope.launch {
             val projectId = UUID.randomUUID().toString()
             val project = ProjectEntity(
                 id = projectId,
                 name = name,
                 path = "/storage/emulated/0/Documents/CodeEditor/$name", // Simplified for demo
-                lastOpenedAt = System.currentTimeMillis()
+                lastOpenedAt = System.currentTimeMillis(),
+                template = template
             )
             repository.insert(project)
             onCreated(projectId)

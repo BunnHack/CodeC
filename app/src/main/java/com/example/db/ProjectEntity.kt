@@ -8,5 +8,6 @@ data class ProjectEntity(
     @PrimaryKey val id: String, // Project ID or Path
     val name: String,
     val path: String,
-    val lastOpenedAt: Long = System.currentTimeMillis()
+    val lastOpenedAt: Long = System.currentTimeMillis(),
+    val template: String = "Blank"
 )

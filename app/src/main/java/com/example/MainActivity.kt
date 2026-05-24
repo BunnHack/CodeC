@@ -5,6 +5,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
@@ -42,11 +44,288 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import kotlinx.coroutines.launch
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.webkit.WebChromeClient
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.ui.home.HomeScreen
 import com.example.ui.theme.*
 import com.termux.view.TerminalView
 import com.termux.terminal.TerminalSession
 import com.termux.terminal.TerminalSessionClient
+
+enum class PreviewViewportMode {
+    DESKTOP,
+    MOBILE_PORTRAIT,
+    MOBILE_LANDSCAPE
+}
+
+@Composable
+fun WebPreviewDialog(fileContents: Map<String, String>, onDismiss: () -> Unit) {
+    val isWebProject = fileContents.containsKey("index.html")
+    var viewportMode by remember { mutableStateOf(PreviewViewportMode.DESKTOP) }
+    var menuExpanded by remember { mutableStateOf(false) }
+    var refreshTrigger by remember { mutableStateOf(0) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .navigationBarsPadding(),
+            color = EditorBackground
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                // High-fidelity toolbar at the top
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SidebarBackground)
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = "Close Preview",
+                            tint = TextNormal
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Column {
+                        Text(
+                            text = if (isWebProject) "Web Preview" else "Preview Unavailable",
+                            fontWeight = FontWeight.Bold,
+                            color = TextNormal,
+                            fontSize = 15.sp
+                        )
+                        val subtitle = when (viewportMode) {
+                            PreviewViewportMode.DESKTOP -> "Desktop Mode • Fullscreen"
+                            PreviewViewportMode.MOBILE_PORTRAIT -> "Mobile View • 360 x 740"
+                            PreviewViewportMode.MOBILE_LANDSCAPE -> "Mobile Landscape • 740 x 360"
+                        }
+                        Text(
+                            text = subtitle,
+                            color = TextMuted,
+                            fontSize = 11.sp
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.weight(1f))
+                    
+                    // Live preview badge
+                    if (isWebProject) {
+                        Surface(
+                            color = Color(0xFF00E676).copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(1.dp, Color(0xFF00E676)),
+                            modifier = Modifier.padding(end = 12.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .background(Color(0xFF00E676), RoundedCornerShape(3.dp))
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "LIVE",
+                                    color = Color(0xFF00E676),
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
+
+                    // Refresh Button
+                    IconButton(onClick = { refreshTrigger++ }) {
+                        Icon(
+                            imageVector = Icons.Filled.Refresh,
+                            contentDescription = "Refresh Preview",
+                            tint = TextNormal
+                        )
+                    }
+
+                    // Three Dots Menu
+                    Box {
+                        IconButton(onClick = { menuExpanded = true }) {
+                            Icon(
+                                imageVector = Icons.Filled.MoreVert,
+                                contentDescription = "More Options",
+                                tint = TextNormal
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = menuExpanded,
+                            onDismissRequest = { menuExpanded = false },
+                            modifier = Modifier.background(SidebarBackground)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Desktop View (Fullscreen)", color = TextNormal) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Computer,
+                                        contentDescription = null,
+                                        tint = if (viewportMode == PreviewViewportMode.DESKTOP) AccentColor else TextMuted
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (viewportMode == PreviewViewportMode.DESKTOP) {
+                                        Icon(imageVector = Icons.Filled.Check, contentDescription = null, tint = AccentColor)
+                                    }
+                                },
+                                onClick = {
+                                    viewportMode = PreviewViewportMode.DESKTOP
+                                    menuExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Mobile Portrait (Phone)", color = TextNormal) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.PhoneAndroid,
+                                        contentDescription = null,
+                                        tint = if (viewportMode == PreviewViewportMode.MOBILE_PORTRAIT) AccentColor else TextMuted
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (viewportMode == PreviewViewportMode.MOBILE_PORTRAIT) {
+                                        Icon(imageVector = Icons.Filled.Check, contentDescription = null, tint = AccentColor)
+                                    }
+                                },
+                                onClick = {
+                                    viewportMode = PreviewViewportMode.MOBILE_PORTRAIT
+                                    menuExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Mobile Landscape (Tablet)", color = TextNormal) },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Filled.Tablet,
+                                        contentDescription = null,
+                                        tint = if (viewportMode == PreviewViewportMode.MOBILE_LANDSCAPE) AccentColor else TextMuted
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (viewportMode == PreviewViewportMode.MOBILE_LANDSCAPE) {
+                                        Icon(imageVector = Icons.Filled.Check, contentDescription = null, tint = AccentColor)
+                                    }
+                                },
+                                onClick = {
+                                    viewportMode = PreviewViewportMode.MOBILE_LANDSCAPE
+                                    menuExpanded = false
+                                }
+                            )
+                            HorizontalDivider(color = BorderColor)
+                            DropdownMenuItem(
+                                text = { Text("Reload Page", color = TextNormal) },
+                                leadingIcon = { Icon(imageVector = Icons.Filled.Refresh, contentDescription = null, tint = TextMuted) },
+                                onClick = {
+                                    refreshTrigger++
+                                    menuExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+                
+                HorizontalDivider(color = BorderColor)
+                
+                if (isWebProject) {
+                    val htmlContent = fileContents["index.html"] ?: ""
+                    val cssContent = fileContents["styles.css"] ?: ""
+                    val jsContent = fileContents["app.js"] ?: ""
+                    
+                    val combinedHtml = remember(htmlContent, cssContent, jsContent, refreshTrigger) {
+                        htmlContent
+                            .replace("<link rel=\"stylesheet\" href=\"styles.css\">", "<style>\n$cssContent\n</style>")
+                            .replace("<script src=\"app.js\"></script>", "<script>\n$jsContent\n</script>")
+                    }
+                    
+                    var webViewRef by remember { mutableStateOf<WebView?>(null) }
+
+                    // We need a styled wrapper box centered on screen if we are in mobile mode
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .background(Color(0xFF0F1012)), // dark outer presentation area
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val webViewModifier = when (viewportMode) {
+                            PreviewViewportMode.DESKTOP -> Modifier.fillMaxSize()
+                            PreviewViewportMode.MOBILE_PORTRAIT -> Modifier
+                                .width(360.dp)
+                                .fillMaxHeight()
+                                .padding(vertical = 24.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .border(4.dp, BorderColor, RoundedCornerShape(24.dp))
+                            PreviewViewportMode.MOBILE_LANDSCAPE -> Modifier
+                                .fillMaxWidth(0.9f)
+                                .aspectRatio(16f / 9.5f)
+                                .clip(RoundedCornerShape(24.dp))
+                                .border(4.dp, BorderColor, RoundedCornerShape(24.dp))
+                        }
+
+                        AndroidView(
+                            modifier = webViewModifier,
+                            factory = { context ->
+                                WebView(context).apply {
+                                    settings.javaScriptEnabled = true
+                                    settings.domStorageEnabled = true
+                                    webChromeClient = WebChromeClient()
+                                    webViewClient = WebViewClient()
+                                    webViewRef = this
+                                    loadDataWithBaseURL(null, combinedHtml, "text/html", "UTF-8", null)
+                                    tag = combinedHtml
+                                }
+                            },
+                            update = { webView ->
+                                if (webView.tag != combinedHtml) {
+                                    webView.loadDataWithBaseURL(null, combinedHtml, "text/html", "UTF-8", null)
+                                    webView.tag = combinedHtml
+                                }
+                            }
+                        )
+                    }
+
+                    DisposableEffect(Unit) {
+                        onDispose {
+                            webViewRef?.apply {
+                                stopLoading()
+                                clearHistory()
+                                loadUrl("about:blank")
+                                removeAllViews()
+                                destroy()
+                            }
+                        }
+                    }
+                } else {
+                    Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        Text("Only Web Projects (with index.html) can be previewed.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
+}
 
 data class CodeFile(val name: String, val content: String, val isFolder: Boolean = false)
 
@@ -74,6 +353,16 @@ class MainActivity : ComponentActivity() {
             defaultHandler?.uncaughtException(thread, throwable)
         }
         
+        // Pre-create cache directories to silence Chromium's lack-of-directory logs
+        try {
+            val jsCacheDir = cacheDir.resolve("WebView/Default/HTTP Cache/Code Cache/js")
+            val wasmCacheDir = cacheDir.resolve("WebView/Default/HTTP Cache/Code Cache/wasm")
+            if (!jsCacheDir.exists()) jsCacheDir.mkdirs()
+            if (!wasmCacheDir.exists()) wasmCacheDir.mkdirs()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
@@ -82,13 +371,14 @@ class MainActivity : ComponentActivity() {
                 NavHost(navController = navController, startDestination = "home") {
                     composable("home") {
                         HomeScreen(
-                            onNavigateToEditor = { projectId ->
-                                navController.navigate("editor/$projectId")
+                            onNavigateToEditor = { projectId, template ->
+                                navController.navigate("editor/$projectId/$template")
                             }
                         )
                     }
-                    composable("editor/{projectId}") { backStackEntry ->
+                    composable("editor/{projectId}/{template}") { backStackEntry ->
                         val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
+                        val template = backStackEntry.arguments?.getString("template") ?: "Web Template (HTML, CSS, JS)"
                         Scaffold(
                             modifier = Modifier.fillMaxSize(),
                             containerColor = ActivityBarBackground,
@@ -96,6 +386,7 @@ class MainActivity : ComponentActivity() {
                         ) { innerPadding ->
                             CodeEditorApp(
                                 projectId = projectId,
+                                template = template,
                                 onBack = { navController.popBackStack() },
                                 modifier = Modifier.padding(innerPadding)
                             )
@@ -109,9 +400,29 @@ class MainActivity : ComponentActivity() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
-    var selectedFile by remember { mutableStateOf(INITIAL_FILES[1]) }
-    var fileContents by remember { mutableStateOf(INITIAL_FILES.associate { it.name to it.content }.toMutableMap()) }
+fun CodeEditorApp(projectId: String, template: String, onBack: () -> Unit, modifier: Modifier = Modifier) {
+    var showWebPreview by remember { mutableStateOf(false) }
+    val initialFiles = remember(template) {
+        if (template.contains("Web", ignoreCase = true)) {
+            listOf(
+                CodeFile("index.html", "<!DOCTYPE html>\n<html>\n<head>\n    <title>My Web App</title>\n    <link rel=\"stylesheet\" href=\"styles.css\">\n</head>\n<body>\n    <h1>Hello web development!</h1>\n    <p>Welcome to your site.</p>\n    <script src=\"app.js\"></script>\n</body>\n</html>"),
+                CodeFile("styles.css", "body {\n    background-color: #121212;\n    color: #ffffff;\n    font-family: Arial, sans-serif;\n    display: flex;\n    flex-direction: column;\n    align-items: center;\n    justify-content: center;\n    height: 100vh;\n    margin: 0;\n}\nh1 {\n    color: #00E676;\n}"),
+                CodeFile("app.js", "console.log('App successfully launched!');\nalert('Welcome!');\n"),
+                CodeFile("README.md", "# Web Project\n\nThis is a simple web dev project template.\n")
+            )
+        } else {
+            listOf(
+                CodeFile("main.kt", "fun main() {\n    println(\"Hello, Blank Project!\")\n}\n"),
+                CodeFile("README.md", "# Blank Project\n\nStart fresh! Use the buttons in the explorer sidebar to add files and folders.\n")
+            )
+        }
+    }
+
+    var filesList by remember(template) { mutableStateOf(initialFiles) }
+    var selectedFile by remember(template) { mutableStateOf(initialFiles.firstOrNull { !it.isFolder } ?: initialFiles[0]) }
+    var fileContents by remember(template) {
+        mutableStateOf(initialFiles.associate { it.name to it.content }.toMutableMap())
+    }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isCompact = maxWidth < 600.dp
@@ -131,11 +442,27 @@ fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Mo
                         Row(modifier = Modifier.fillMaxHeight()) {
                             ActivityBar(onBack = onBack)
                             Sidebar(
-                                files = INITIAL_FILES,
+                                files = filesList,
                                 selectedFile = selectedFile,
                                 onFileSelected = {
                                     selectedFile = it
                                     scope.launch { drawerState.close() }
+                                },
+                                onCreateFile = { name ->
+                                    if (name.isNotBlank()) {
+                                        val newFile = CodeFile(name, "")
+                                        filesList = filesList + newFile
+                                        val updatedContents = fileContents.toMutableMap()
+                                        updatedContents[name] = ""
+                                        fileContents = updatedContents
+                                        selectedFile = newFile
+                                    }
+                                },
+                                onCreateFolder = { name ->
+                                    if (name.isNotBlank()) {
+                                        val newFolder = CodeFile(name, "", isFolder = true)
+                                        filesList = filesList + newFolder
+                                    }
                                 }
                             )
                         }
@@ -165,7 +492,7 @@ fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Mo
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(selectedFile.name, color = TextNormal, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                         Spacer(modifier = Modifier.weight(1f))
-                        IconButton(onClick = {}) {
+                        IconButton(onClick = { showWebPreview = true }) {
                             Icon(Icons.Filled.PlayArrow, contentDescription = "Run", tint = TextLineNumber)
                         }
                     }
@@ -199,9 +526,25 @@ fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Mo
 
                 // Explorer Sidebar
                 Sidebar(
-                    files = INITIAL_FILES,
+                    files = filesList,
                     selectedFile = selectedFile,
-                    onFileSelected = { selectedFile = it }
+                    onFileSelected = { selectedFile = it },
+                    onCreateFile = { name ->
+                        if (name.isNotBlank()) {
+                            val newFile = CodeFile(name, "")
+                            filesList = filesList + newFile
+                            val updatedContents = fileContents.toMutableMap()
+                            updatedContents[name] = ""
+                            fileContents = updatedContents
+                            selectedFile = newFile
+                        }
+                    },
+                    onCreateFolder = { name ->
+                        if (name.isNotBlank()) {
+                            val newFolder = CodeFile(name, "", isFolder = true)
+                            filesList = filesList + newFolder
+                        }
+                    }
                 )
                 VerticalDivider(color = BorderColor, thickness = 1.dp)
 
@@ -210,7 +553,7 @@ fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Mo
                     .weight(1f)
                     .background(EditorBackground)) {
                     // Tabs Row
-                    EditorTabs(selectedFile = selectedFile)
+                    EditorTabs(selectedFile = selectedFile, onPlay = { showWebPreview = true })
 
                     Column(modifier = Modifier.weight(1f)) {
                         // Editor Input
@@ -234,6 +577,13 @@ fun CodeEditorApp(projectId: String, onBack: () -> Unit, modifier: Modifier = Mo
                     StatusBar()
                 }
             }
+        }
+        
+        if (showWebPreview) {
+            WebPreviewDialog(
+                fileContents = fileContents,
+                onDismiss = { showWebPreview = false }
+            )
         }
     }
 }
@@ -259,7 +609,87 @@ fun ActivityBar(onBack: () -> Unit) {
 }
 
 @Composable
-fun Sidebar(files: List<CodeFile>, selectedFile: CodeFile, onFileSelected: (CodeFile) -> Unit) {
+fun Sidebar(
+    files: List<CodeFile>,
+    selectedFile: CodeFile,
+    onFileSelected: (CodeFile) -> Unit,
+    onCreateFile: (String) -> Unit,
+    onCreateFolder: (String) -> Unit
+) {
+    var showCreateFileDialog by remember { mutableStateOf(false) }
+    var showCreateFolderDialog by remember { mutableStateOf(false) }
+    var inputName by remember { mutableStateOf("") }
+
+    if (showCreateFileDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateFileDialog = false; inputName = "" },
+            title = { Text("New File") },
+            text = {
+                OutlinedTextField(
+                    value = inputName,
+                    onValueChange = { inputName = it },
+                    label = { Text("File Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (inputName.isNotBlank()) {
+                            onCreateFile(inputName.trim())
+                            showCreateFileDialog = false
+                            inputName = ""
+                        }
+                    },
+                    enabled = inputName.isNotBlank()
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateFileDialog = false; inputName = "" }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showCreateFolderDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateFolderDialog = false; inputName = "" },
+            title = { Text("New Folder") },
+            text = {
+                OutlinedTextField(
+                    value = inputName,
+                    onValueChange = { inputName = it },
+                    label = { Text("Folder Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (inputName.isNotBlank()) {
+                            onCreateFolder(inputName.trim())
+                            showCreateFolderDialog = false
+                            inputName = ""
+                        }
+                    },
+                    enabled = inputName.isNotBlank()
+                ) {
+                    Text("Create")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateFolderDialog = false; inputName = "" }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Column(
         modifier = Modifier
             .width(220.dp)
@@ -284,13 +714,17 @@ fun Sidebar(files: List<CodeFile>, selectedFile: CodeFile, onFileSelected: (Code
                     imageVector = Icons.Filled.Add,
                     contentDescription = "New File",
                     tint = TextLineNumber,
-                    modifier = Modifier.size(16.dp).clickable {}
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clickable { showCreateFileDialog = true }
                 )
                 Icon(
                     imageVector = Icons.Filled.CreateNewFolder,
                     contentDescription = "New Folder",
                     tint = TextLineNumber,
-                    modifier = Modifier.size(16.dp).clickable {}
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clickable { showCreateFolderDialog = true }
                 )
             }
         }
@@ -327,7 +761,7 @@ fun Sidebar(files: List<CodeFile>, selectedFile: CodeFile, onFileSelected: (Code
 }
 
 @Composable
-fun EditorTabs(selectedFile: CodeFile) {
+fun EditorTabs(selectedFile: CodeFile, onPlay: () -> Unit) {
     Column {
         Row(
             modifier = Modifier
@@ -368,7 +802,7 @@ fun EditorTabs(selectedFile: CodeFile) {
                 }
             }
             Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = {}) {
+            IconButton(onClick = onPlay) {
                 Icon(Icons.Filled.PlayArrow, contentDescription = "Run", tint = TextLineNumber)
             }
         }

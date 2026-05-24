@@ -1,6 +1,7 @@
 package com.example.ui.home
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,7 +32,7 @@ import java.util.Locale
 @Composable
 fun HomeScreen(
     viewModel: HomeViewModel = viewModel(),
-    onNavigateToEditor: (String) -> Unit
+    onNavigateToEditor: (String, String) -> Unit
 ) {
     val projects by viewModel.projects.collectAsStateWithLifecycle()
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -92,7 +95,7 @@ fun HomeScreen(
                             project = project,
                             onClick = {
                                 viewModel.updateLastOpened(project)
-                                onNavigateToEditor(project.id)
+                                onNavigateToEditor(project.id, project.template)
                             },
                             onDelete = { viewModel.deleteProject(project.id) }
                         )
@@ -104,10 +107,10 @@ fun HomeScreen(
         if (showCreateDialog) {
             CreateProjectDialog(
                 onDismiss = { showCreateDialog = false },
-                onCreate = { name ->
-                    viewModel.createNewProject(name) { newId ->
+                onCreate = { name, template ->
+                    viewModel.createNewProject(name, template) { newId ->
                         showCreateDialog = false
-                        onNavigateToEditor(newId)
+                        onNavigateToEditor(newId, template)
                     }
                 }
             )
@@ -175,26 +178,89 @@ fun ProjectCard(project: ProjectEntity, onClick: () -> Unit, onDelete: () -> Uni
 }
 
 @Composable
-fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+fun CreateProjectDialog(onDismiss: () -> Unit, onCreate: (String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
+    val templates = listOf("Blank Template", "Web Template (HTML, CSS, JS)")
+    var selectedTemplate by remember { mutableStateOf(templates.first()) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Create New Project") },
+        title = { Text("Create New Project", fontWeight = FontWeight.Bold) },
         text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text("Project Name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Project Name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Select Template:", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+                    
+                    templates.forEach { template ->
+                        val isSelected = selectedTemplate == template
+                        val (title, icon, desc) = if (template.contains("Blank", ignoreCase = true)) {
+                            Triple("Blank Project", Icons.Filled.Folder, "Start clean. Manage your own workspace and compile directly in the terminal.")
+                        } else {
+                            Triple("Web Project", Icons.Filled.Language, "Equipped with index.html, styles.css, app.js, and a fast integrated Web Preview.")
+                        }
+                        
+                        OutlinedCard(
+                            onClick = { selectedTemplate = template },
+                            modifier = Modifier.fillMaxWidth(),
+                            border = BorderStroke(
+                                width = if (isSelected) 2.dp else 1.dp,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                            ),
+                            colors = CardDefaults.outlinedCardColors(
+                                containerColor = if (isSelected) {
+                                    MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.12f)
+                                } else {
+                                    MaterialTheme.colorScheme.surface
+                                }
+                            )
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = title,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = desc,
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
+                                        lineHeight = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         },
         confirmButton = {
             Button(
                 onClick = {
                     if (name.isNotBlank()) {
-                        onCreate(name.trim())
+                        onCreate(name.trim(), selectedTemplate)
                     }
                 },
                 enabled = name.isNotBlank()
