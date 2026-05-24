@@ -15,6 +15,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -75,18 +78,28 @@ enum class PreviewViewportMode {
 @Composable
 fun WebPreviewDialog(fileContents: Map<String, String>, onDismiss: () -> Unit) {
     val context = LocalContext.current
-    val isWebProject = fileContents.containsKey("index.html")
+    val htmlFileName = remember(fileContents) {
+        fileContents.keys.find { it.endsWith(".html", ignoreCase = true) }
+    }
+    val isWebProject = htmlFileName != null
     var viewportMode by remember { mutableStateOf(PreviewViewportMode.DESKTOP) }
     var menuExpanded by remember { mutableStateOf(false) }
     var refreshTrigger by remember { mutableStateOf(0) }
 
-    val combinedHtml = remember(fileContents, refreshTrigger) {
-        val htmlContent = fileContents["index.html"] ?: ""
-        val cssContent = fileContents["styles.css"] ?: ""
-        val jsContent = fileContents["app.js"] ?: ""
-        htmlContent
-            .replace("<link rel=\"stylesheet\" href=\"styles.css\">", "<style>\n$cssContent\n</style>")
-            .replace("<script src=\"app.js\"></script>", "<script>\n$jsContent\n</script>")
+    val combinedHtml = remember(fileContents, refreshTrigger, htmlFileName) {
+        if (htmlFileName == null) "" else {
+            val htmlContent = fileContents[htmlFileName] ?: ""
+            val cssName = fileContents.keys.find { it.endsWith(".css", ignoreCase = true) } ?: "styles.css"
+            val jsName = fileContents.keys.find { it.endsWith(".js", ignoreCase = true) } ?: "app.js"
+            val cssContent = fileContents[cssName] ?: ""
+            val jsContent = fileContents[jsName] ?: ""
+            
+            htmlContent
+                .replace("<link rel=\"stylesheet\" href=\"$cssName\">", "<style>\n$cssContent\n</style>")
+                .replace("<link rel=\"stylesheet\" href=\"styles.css\">", "<style>\n$cssContent\n</style>")
+                .replace("<script src=\"$jsName\"></script>", "<script>\n$jsContent\n</script>")
+                .replace("<script src=\"app.js\"></script>", "<script>\n$jsContent\n</script>")
+        }
     }
 
     Dialog(
@@ -736,9 +749,8 @@ fun Sidebar(
     var inputName by remember { mutableStateOf("") }
 
     var selectedFileForMenu by remember { mutableStateOf<CodeFile?>(null) }
-    var showRenameDialog by remember { mutableStateOf(false) }
+    var renamingFileId by remember { mutableStateOf<CodeFile?>(null) }
     var showDeleteDialog by remember { mutableStateOf(false) }
-    var renameNameInput by remember { mutableStateOf("") }
 
     if (showCreateFileDialog) {
         AlertDialog(
@@ -810,40 +822,7 @@ fun Sidebar(
         )
     }
 
-    if (showRenameDialog && selectedFileForMenu != null) {
-        val file = selectedFileForMenu!!
-        AlertDialog(
-            onDismissRequest = { showRenameDialog = false },
-            title = { Text(if (file.isFolder) "Rename Folder" else "Rename File") },
-            text = {
-                OutlinedTextField(
-                    value = renameNameInput,
-                    onValueChange = { renameNameInput = it },
-                    label = { Text("Name") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        if (renameNameInput.isNotBlank()) {
-                            onRenameFile(file, renameNameInput.trim())
-                            showRenameDialog = false
-                        }
-                    },
-                    enabled = renameNameInput.isNotBlank()
-                ) {
-                    Text("Rename")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showRenameDialog = false }) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
+
 
     if (showDeleteDialog && selectedFileForMenu != null) {
         val file = selectedFileForMenu!!
@@ -916,20 +895,31 @@ fun Sidebar(
                 val isSelected = file == selectedFile
                 var showContextMenu by remember { mutableStateOf(false) }
                 
+                val isRenamingThis = renamingFileId == file
+                
+                val itemModifier = if (isRenamingThis) {
+                    Modifier
+                        .fillMaxWidth()
+                        .background(if (isSelected && !file.isFolder) TabActiveBackground else Color.Transparent)
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                } else {
+                    Modifier
+                        .fillMaxWidth()
+                        .combinedClickable(
+                            onLongClick = {
+                                showContextMenu = true
+                            },
+                            onClick = {
+                                if (!file.isFolder) onFileSelected(file)
+                            }
+                        )
+                        .background(if (isSelected && !file.isFolder) TabActiveBackground else Color.Transparent)
+                        .padding(horizontal = 16.dp, vertical = 6.dp)
+                }
+
                 Box {
                     Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .combinedClickable(
-                                onLongClick = {
-                                    showContextMenu = true
-                                },
-                                onClick = {
-                                    if (!file.isFolder) onFileSelected(file)
-                                }
-                            )
-                            .background(if (isSelected && !file.isFolder) TabActiveBackground else Color.Transparent)
-                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        modifier = itemModifier,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
@@ -939,13 +929,65 @@ fun Sidebar(
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = file.name,
-                            color = if (isSelected && !file.isFolder) Color.White else TextNormal,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        
+                        if (isRenamingThis) {
+                            var inlineNameText by remember { mutableStateOf(file.name) }
+                            BasicTextField(
+                                value = inlineNameText,
+                                onValueChange = { inlineNameText = it },
+                                textStyle = TextStyle(color = Color.White, fontSize = 14.sp),
+                                cursorBrush = SolidColor(Color.White),
+                                singleLine = true,
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(
+                                    onDone = {
+                                        if (inlineNameText.isNotBlank()) {
+                                            onRenameFile(file, inlineNameText.trim())
+                                        }
+                                        renamingFileId = null
+                                    }
+                                ),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .background(Color.Transparent)
+                                    .border(1.dp, BorderColor, RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = "Confirm",
+                                tint = Color(0xFF00E676),
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clickable {
+                                        if (inlineNameText.isNotBlank()) {
+                                            onRenameFile(file, inlineNameText.trim())
+                                        }
+                                        renamingFileId = null
+                                    }
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Cancel",
+                                tint = Color(0xFFFF5252),
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clickable {
+                                        renamingFileId = null
+                                    }
+                            )
+                        } else {
+                            Text(
+                                text = file.name,
+                                color = if (isSelected && !file.isFolder) Color.White else TextNormal,
+                                fontSize = 14.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
                     }
 
                     DropdownMenu(
@@ -958,9 +1000,7 @@ fun Sidebar(
                             leadingIcon = { Icon(Icons.Filled.Edit, contentDescription = null, tint = TextMuted) },
                             onClick = {
                                 showContextMenu = false
-                                selectedFileForMenu = file
-                                renameNameInput = file.name
-                                showRenameDialog = true
+                                renamingFileId = file
                             }
                         )
                         if (!file.isFolder) {
