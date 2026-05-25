@@ -539,6 +539,76 @@ fun CodeEditorApp(projectId: String, template: String, onBack: () -> Unit, modif
         Toast.makeText(context, "Copied Path: $path", Toast.LENGTH_SHORT).show()
     }
 
+    var clipboardFile by remember { mutableStateOf<CodeFile?>(null) }
+    var isCutOperation by remember { mutableStateOf(false) }
+
+    val onCopyFile: (CodeFile) -> Unit = { file ->
+        clipboardFile = file
+        isCutOperation = false
+        Toast.makeText(context, "Copied '${file.name}' to clipboard", Toast.LENGTH_SHORT).show()
+    }
+
+    val onCutFile: (CodeFile) -> Unit = { file ->
+        clipboardFile = file
+        isCutOperation = true
+        Toast.makeText(context, "Cut '${file.name}' to clipboard", Toast.LENGTH_SHORT).show()
+    }
+
+    val onPasteFile: (CodeFile?) -> Unit = { target ->
+        val clip = clipboardFile
+        if (clip != null) {
+            val isFolder = clip.isFolder
+            if (isCutOperation) {
+                var newName = clip.name
+                val otherFiles = filesList.filter { it != clip }
+                if (otherFiles.any { it.name == newName }) {
+                    val base = newName.substringBeforeLast(".")
+                    val ext = if (newName.contains(".") && !isFolder) "." + newName.substringAfterLast(".") else ""
+                    var counter = 1
+                    while (otherFiles.any { it.name == "${base}_paste$counter$ext" }) {
+                        counter++
+                    }
+                    newName = "${base}_paste$counter$ext"
+                }
+
+                filesList = filesList.map {
+                    if (it == clip) it.copy(name = newName) else it
+                }
+                
+                if (!isFolder) {
+                    val updatedContents = fileContents.toMutableMap()
+                    val content = updatedContents.remove(clip.name) ?: clip.content
+                    updatedContents[newName] = content
+                    fileContents = updatedContents
+                    if (selectedFile == clip) {
+                        selectedFile = selectedFile.copy(name = newName, content = content)
+                    }
+                }
+                Toast.makeText(context, "Moved '${clip.name}' to '$newName'", Toast.LENGTH_SHORT).show()
+                clipboardFile = null
+                isCutOperation = false
+            } else {
+                val base = clip.name.substringBeforeLast(".")
+                val ext = if (clip.name.contains(".") && !isFolder) "." + clip.name.substringAfterLast(".") else ""
+                var newName = "${base}_copy$ext"
+                var counter = 1
+                while (filesList.any { it.name == newName }) {
+                    newName = "${base}_copy$counter$ext"
+                    counter++
+                }
+
+                val duplicatedFile = CodeFile(newName, clip.content, isFolder)
+                filesList = filesList + duplicatedFile
+                if (!isFolder) {
+                    val updated = fileContents.toMutableMap()
+                    updated[newName] = fileContents[clip.name] ?: clip.content
+                    fileContents = updated
+                }
+                Toast.makeText(context, "Copied and created '$newName'", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val isCompact = maxWidth < 600.dp
         
@@ -582,7 +652,11 @@ fun CodeEditorApp(projectId: String, template: String, onBack: () -> Unit, modif
                                 onDeleteFile = onDeleteFile,
                                 onRenameFile = onRenameFile,
                                 onDownloadFile = onDownloadFile,
-                                onCopyPath = onCopyPath
+                                onCopyPath = onCopyPath,
+                                onCopyFile = onCopyFile,
+                                onCutFile = onCutFile,
+                                onPasteFile = onPasteFile,
+                                clipboardFile = clipboardFile
                             )
                         }
                     }
@@ -615,6 +689,9 @@ fun CodeEditorApp(projectId: String, template: String, onBack: () -> Unit, modif
                             Icon(Icons.Filled.PlayArrow, contentDescription = "Run", tint = TextLineNumber)
                         }
                     }
+
+                    Breadcrumbs(projectName = projectName, fileName = selectedFile.name)
+                    HorizontalDivider(color = BorderColor, thickness = 1.dp)
 
                     Column(modifier = Modifier.weight(1f)) {
                         // Editor Input
@@ -667,7 +744,11 @@ fun CodeEditorApp(projectId: String, template: String, onBack: () -> Unit, modif
                     onDeleteFile = onDeleteFile,
                     onRenameFile = onRenameFile,
                     onDownloadFile = onDownloadFile,
-                    onCopyPath = onCopyPath
+                    onCopyPath = onCopyPath,
+                    onCopyFile = onCopyFile,
+                    onCutFile = onCutFile,
+                    onPasteFile = onPasteFile,
+                    clipboardFile = clipboardFile
                 )
                 VerticalDivider(color = BorderColor, thickness = 1.dp)
 
@@ -677,6 +758,8 @@ fun CodeEditorApp(projectId: String, template: String, onBack: () -> Unit, modif
                     .background(EditorBackground)) {
                     // Tabs Row
                     EditorTabs(selectedFile = selectedFile, onPlay = { showWebPreview = true })
+                    Breadcrumbs(projectName = projectName, fileName = selectedFile.name)
+                    HorizontalDivider(color = BorderColor, thickness = 1.dp)
 
                     Column(modifier = Modifier.weight(1f)) {
                         // Editor Input
@@ -742,7 +825,11 @@ fun Sidebar(
     onDeleteFile: (CodeFile) -> Unit,
     onRenameFile: (CodeFile, String) -> Unit,
     onDownloadFile: (CodeFile) -> Unit,
-    onCopyPath: (CodeFile) -> Unit
+    onCopyPath: (CodeFile) -> Unit,
+    onCopyFile: (CodeFile) -> Unit,
+    onCutFile: (CodeFile) -> Unit,
+    onPasteFile: (CodeFile?) -> Unit,
+    clipboardFile: CodeFile?
 ) {
     var showCreateFileDialog by remember { mutableStateOf(false) }
     var showCreateFolderDialog by remember { mutableStateOf(false) }
@@ -1003,6 +1090,32 @@ fun Sidebar(
                                 renamingFileId = file
                             }
                         )
+                        DropdownMenuItem(
+                            text = { Text("Copy", color = TextNormal) },
+                            leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null, tint = TextMuted) },
+                            onClick = {
+                                showContextMenu = false
+                                onCopyFile(file)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Cut", color = TextNormal) },
+                            leadingIcon = { Icon(Icons.Filled.ContentCut, contentDescription = null, tint = TextMuted) },
+                            onClick = {
+                                showContextMenu = false
+                                onCutFile(file)
+                            }
+                        )
+                        if (clipboardFile != null) {
+                            DropdownMenuItem(
+                                text = { Text("Paste", color = TextNormal) },
+                                leadingIcon = { Icon(Icons.Filled.ContentPaste, contentDescription = null, tint = TextMuted) },
+                                onClick = {
+                                    showContextMenu = false
+                                    onPasteFile(file)
+                                }
+                            )
+                        }
                         if (!file.isFolder) {
                             DropdownMenuItem(
                                 text = { Text("Download", color = TextNormal) },
@@ -1032,6 +1145,67 @@ fun Sidebar(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+fun Breadcrumbs(projectName: String, fileName: String, modifier: Modifier = Modifier) {
+    val items = remember(projectName, fileName) {
+        val list = mutableListOf<String>()
+        list.add(projectName)
+        if (fileName.contains("/")) {
+            list.addAll(fileName.split("/").filter { it.isNotEmpty() })
+        } else {
+            list.add(fileName)
+        }
+        list
+    }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(EditorBackground)
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        items.forEachIndexed { index, item ->
+            val isLast = index == items.size - 1
+            val isFirst = index == 0
+            
+            val icon = when {
+                isFirst -> Icons.Filled.FolderOpen
+                !isLast -> Icons.Filled.Folder
+                item.endsWith(".html") || item.endsWith(".css") || item.endsWith(".js") || item.endsWith(".kt") -> Icons.Filled.Code
+                else -> Icons.Filled.Description
+            }
+            
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (isLast) AccentColor else TextMuted,
+                modifier = Modifier.size(13.dp)
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            
+            Text(
+                text = item,
+                color = if (isLast) TextNormal else TextMuted,
+                fontSize = 11.sp,
+                fontWeight = if (isLast) FontWeight.Medium else FontWeight.Normal
+            )
+            
+            if (!isLast) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = TextLineNumber,
+                    modifier = Modifier.size(11.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
             }
         }
     }
