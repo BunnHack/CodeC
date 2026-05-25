@@ -31,6 +31,10 @@ object RuntimeInstaller {
         }
 
         val nativeLibDir = context.applicationInfo.nativeLibraryDir
+        Log.d(TAG, "nativeLibraryDir=${nativeLibDir}")
+        File(nativeLibDir).listFiles()?.forEach {
+            Log.d(TAG, "native lib: ${it.name}")
+        }
         val sourceBusybox = File(nativeLibDir, "libbusybox.so")
         
         if (!sourceBusybox.exists()) {

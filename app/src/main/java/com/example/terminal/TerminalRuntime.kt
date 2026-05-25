@@ -19,7 +19,7 @@ object TerminalRuntime {
         return TerminalLaunchSpec(
             executable = shExec,
             workingDirectory = home.absolutePath,
-            args = arrayOf(shExec, "-l"),
+            args = arrayOf("-l"),
             environment = arrayOf(
                 "PREFIX=${prefix.absolutePath}",
                 "HOME=${home.absolutePath}",
