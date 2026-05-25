@@ -130,7 +130,7 @@ tasks.register("downloadBusyBox") {
     notCompatibleWithConfigurationCache("Downloading assets cannot be cached")
     doLast {
         val baseUrl = "https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl"
-        val assetsDir = file("src/main/assets/runtime")
+        val jniLibsDir = file("src/main/jniLibs")
         val abis = mapOf(
             "arm64-v8a" to "busybox-armv8l",
             "armeabi-v7a" to "busybox-armv7l",
@@ -138,9 +138,9 @@ tasks.register("downloadBusyBox") {
             "x86" to "busybox-i686"
         )
         abis.forEach { (abi, binName) ->
-            val dir = file("$assetsDir/$abi")
+            val dir = file("$jniLibsDir/$abi")
             dir.mkdirs()
-            val outFile = file("$dir/busybox")
+            val outFile = file("$dir/libbusybox.so")
             if (!outFile.exists()) {
                 println("Downloading $binName for $abi...")
                 try {
@@ -158,7 +158,7 @@ tasks.register("downloadBusyBox") {
 }
 
 tasks.whenTaskAdded {
-    if (name.startsWith("generate") && name.endsWith("Assets")) {
+    if (name == "preBuild") {
         dependsOn("downloadBusyBox")
     }
 }
