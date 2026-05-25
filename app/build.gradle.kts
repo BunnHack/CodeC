@@ -131,40 +131,5 @@ dependencies {
   "ksp"(libs.moshi.kotlin.codegen)
 }
 
-tasks.register("downloadBusyBox") {
-    notCompatibleWithConfigurationCache("Downloading assets cannot be cached")
-    doLast {
-        val baseUrl = "https://busybox.net/downloads/binaries/1.31.0-defconfig-multiarch-musl"
-        val jniLibsDir = file("src/main/jniLibs")
-        val abis = mapOf(
-            "arm64-v8a" to "busybox-armv8l",
-            "armeabi-v7a" to "busybox-armv7l",
-            "x86_64" to "busybox-x86_64",
-            "x86" to "busybox-i686"
-        )
-        abis.forEach { (abi, binName) ->
-            val dir = file("$jniLibsDir/$abi")
-            dir.mkdirs()
-            val outFile = file("$dir/libbusybox.so")
-            if (!outFile.exists()) {
-                println("Downloading $binName for $abi...")
-                try {
-                    URL("$baseUrl/$binName").openStream().use { input ->
-                        outFile.outputStream().use { output ->
-                            input.copyTo(output)
-                        }
-                    }
-                } catch(e: Exception) {
-                    println("Failed to download $binName: ${e.message}")
-                }
-            }
-        }
-    }
-}
 
-tasks.whenTaskAdded {
-    if (name == "preBuild") {
-        dependsOn("downloadBusyBox")
-    }
-}
 
