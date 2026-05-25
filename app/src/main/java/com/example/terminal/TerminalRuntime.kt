@@ -12,20 +12,33 @@ object TerminalRuntime {
         val home = File(context.filesDir, "home")
         val tmp = File(context.cacheDir, "tmp")
         
-        val executable = File(prefix, "bin/sh")
-        val shExec = if (executable.exists()) executable.absolutePath else "/system/bin/sh"
+        val nativeLibDir = context.applicationInfo.nativeLibraryDir
+        val sourceBusybox = File(nativeLibDir, "libbusybox.so")
         val binPath = File(prefix, "bin").absolutePath
 
+        val executable = if (sourceBusybox.exists()) {
+            sourceBusybox.absolutePath
+        } else {
+            "/system/bin/sh"
+        }
+
+        val args = if (sourceBusybox.exists()) {
+            arrayOf("sh", "-l")
+        } else {
+            arrayOf("-l")
+        }
+
         return TerminalLaunchSpec(
-            executable = shExec,
+            executable = executable,
             workingDirectory = home.absolutePath,
-            args = arrayOf("-l"),
+            args = args,
             environment = arrayOf(
                 "PREFIX=${prefix.absolutePath}",
                 "HOME=${home.absolutePath}",
                 "TMPDIR=${tmp.absolutePath}",
                 "PATH=$binPath:/system/bin:/system/xbin",
-                "TERM=xterm-256color"
+                "TERM=xterm-256color",
+                "BUSYBOX_EXEC=${sourceBusybox.absolutePath}"
             )
         )
     }

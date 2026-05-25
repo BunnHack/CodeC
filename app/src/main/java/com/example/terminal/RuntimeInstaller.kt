@@ -21,12 +21,12 @@ object RuntimeInstaller {
         if (!projectsDir.exists()) projectsDir.mkdirs()
         if (!tmpDir.exists()) tmpDir.mkdirs()
 
-        val profileFile = File(homeDir, ".profile")
-        if (!profileFile.exists()) {
+        // Clean up any historical/broken/32-bit binaries or symlinks inside binDir
+        binDir.listFiles()?.forEach { file ->
             try {
-                profileFile.writeText("export PS1='\\w \\$ '\n")
+                file.delete()
             } catch (e: Exception) {
-                Log.e(TAG, "Failed to create .profile: ${e.message}")
+                Log.e(TAG, "Failed to clean legacy file: ${file.name}", e)
             }
         }
 
@@ -42,25 +42,21 @@ object RuntimeInstaller {
             return
         }
 
-        val destBusybox = File(binDir, "busybox")
-        if (!destBusybox.exists()) {
-            try {
-                android.system.Os.symlink(sourceBusybox.absolutePath, destBusybox.absolutePath)
-                Log.d(TAG, "Busybox symlink created.")
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to symlink busybox: ${e.message}")
+        val profileFile = File(homeDir, ".profile")
+        try {
+            val profileContent = buildString {
+                appendLine("export PS1='\\w \\$ '")
+                appendLine("if [ -n \"\$BUSYBOX_EXEC\" ] && [ -f \"\$BUSYBOX_EXEC\" ]; then")
+                appendLine("    for cmd in \$(\"\$BUSYBOX_EXEC\" --list); do")
+                appendLine("        eval \"\$cmd() { \\\"\$BUSYBOX_EXEC\\\" \$cmd \\\"\\$@\\\"; }\"")
+                appendLine("    done")
+                appendLine("    busybox() { \"\$BUSYBOX_EXEC\" \"\$@\"; }")
+                appendLine("fi")
             }
-        }
-
-        val shFile = File(binDir, "sh")
-        if (!shFile.exists() && destBusybox.exists()) {
-            try {
-                Log.d(TAG, "Installing busybox symlinks...")
-                // We run the SO file directly to install symlinks
-                Runtime.getRuntime().exec(arrayOf(sourceBusybox.absolutePath, "--install", "-s", "."), null, binDir).waitFor()
-            } catch(e: Exception) {
-                Log.e(TAG, "Failed to create symlinks: ${e.message}")
-            }
+            profileFile.writeText(profileContent)
+            Log.d(TAG, ".profile written successfully.")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to create .profile: ${e.message}")
         }
     }
 }
