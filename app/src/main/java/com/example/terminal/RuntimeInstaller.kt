@@ -50,7 +50,7 @@ object RuntimeInstaller {
                 appendLine("    for cmd in \$(\"\$BUSYBOX_EXEC\" --list); do")
                 appendLine("        eval \"\$cmd() { \\\"\$BUSYBOX_EXEC\\\" \$cmd \\\"\\$@\\\"; }\"")
                 appendLine("    done")
-                appendLine("    busybox() { \"\$BUSYBOX_EXEC\" \"\$@\"; }")
+                appendLine("    busybox() { \"\$BUSYBOX_EXEC\" busybox \"\$@\"; }")
                 appendLine("fi")
             }
             profileFile.writeText(profileContent)
