@@ -16,24 +16,37 @@ object TerminalRuntime {
         val sourceBusybox = File(nativeLibDir, "libbusybox.so")
 
         if (useProot) {
-            // Unpack PRoot assets if needed
+            // Unpack PRoot assets and rootfs if needed
             ContainerInstaller.ensureInstalled(context)
+            RootfsInstaller.ensureInstalled(context)
 
             val nativeLibDir = context.applicationInfo.nativeLibraryDir
             val prootFile = File(nativeLibDir, "libproot.so")
+            val rootfsDir = File(context.filesDir, "containers/debian")
+
             if (prootFile.exists()) {
-                val args = arrayOf("--", "/system/bin/sh")
+                val args = arrayOf(
+                    "-0",
+                    "-r", rootfsDir.absolutePath,
+                    "-b", "/dev",
+                    "-b", "/proc",
+                    "-b", "/sys",
+                    "-b", "${home.absolutePath}:/root",
+                    "-w", "/root",
+                    "--",
+                    "/bin/sh"
+                )
                 return TerminalLaunchSpec(
                     executable = prootFile.absolutePath,
                     workingDirectory = home.absolutePath,
                     args = args,
                     environment = arrayOf(
-                        "HOME=${home.absolutePath}",
-                        "TMPDIR=${tmp.absolutePath}",
+                        "HOME=/root",
                         "TERM=xterm-256color",
+                        "TMPDIR=/tmp",
+                        "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
                         "LD_LIBRARY_PATH=${prefix.absolutePath}/lib:${nativeLibDir}",
-                        "PROOT_LOADER=${File(nativeLibDir, "libproot_loader.so").absolutePath}",
-                        "PATH=/system/bin:/system/xbin"
+                        "PROOT_LOADER=${File(nativeLibDir, "libproot_loader.so").absolutePath}"
                     )
                 )
             }

@@ -44,6 +44,26 @@ object ContainerRuntime {
             context = context
         ))
 
+        // Test 3: rootfs sh -c 'uname -a'
+        val rootfsDir = File(context.filesDir, "containers/debian")
+        if (rootfsDir.exists() && File(rootfsDir, "bin/sh").exists()) {
+            results.add(runCommand(
+                name = "Test 3: proot inside rootfs 'uname -a'",
+                command = listOf(
+                    prootFile.absolutePath,
+                    "-0",
+                    "-r", rootfsDir.absolutePath,
+                    "-b", "/dev",
+                    "-b", "/proc",
+                    "-b", "/sys",
+                    "--",
+                    "/bin/sh", "-c", "uname -a"
+                ),
+                prefix = prefix,
+                context = context
+            ))
+        }
+
         return results
     }
 
