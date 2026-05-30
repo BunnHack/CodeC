@@ -38,18 +38,29 @@ object RootfsInstaller {
         onProgress("Extracting Alpine rootfs, please wait...")
         Log.d(TAG, "Starting Rootfs installation...")
 
-        val tempTarFile = File(context.cacheDir, "alpine-rootfs.tar.gz")
+        // Determine the actual asset name packed in APK (could be .tar or .tar.gz)
+        val assetsList = context.assets.list("") ?: emptyArray()
+        val assetName = when {
+            assetsList.contains("alpine-rootfs.tar") -> "alpine-rootfs.tar"
+            assetsList.contains("alpine-rootfs.tar.gz") -> "alpine-rootfs.tar.gz"
+            else -> {
+                assetsList.firstOrNull { it.startsWith("alpine-rootfs") } ?: "alpine-rootfs.tar.gz"
+            }
+        }
+        val isGz = assetName.endsWith(".gz")
+
+        val tempTarFile = File(context.cacheDir, assetName)
         try {
             // Copy asset to cache file
-            context.assets.open("alpine-rootfs.tar.gz").use { input ->
+            context.assets.open(assetName).use { input ->
                 FileOutputStream(tempTarFile).use { output ->
                     input.copyTo(output)
                 }
             }
-            Log.d(TAG, "Copied alpine-rootfs.tar.gz to cache: ${tempTarFile.length()} bytes")
+            Log.d(TAG, "Copied $assetName to cache: ${tempTarFile.length()} bytes")
         } catch (e: IOException) {
-            Log.e(TAG, "Failed to copy rootfs asset: ${e.message}", e)
-            onProgress("Error: Failed to open alpine-rootfs.tar.gz from assets.")
+            Log.e(TAG, "Failed to copy rootfs asset $assetName: ${e.message}", e)
+            onProgress("Error: Failed to open $assetName from assets.")
             return false
         }
 
@@ -65,14 +76,15 @@ object RootfsInstaller {
 
         onProgress("Unpacking rootfs files...")
         try {
-            val processBuilder = ProcessBuilder(
+            val tarArgs = listOf(
                 busyboxFile.absolutePath,
                 "tar",
-                "-zxf",
+                if (isGz) "-zxf" else "-xf",
                 tempTarFile.absolutePath,
                 "-C",
                 rootfsDir.absolutePath
             )
+            val processBuilder = ProcessBuilder(tarArgs)
             processBuilder.directory(context.filesDir)
             
             // Set basic environment variables

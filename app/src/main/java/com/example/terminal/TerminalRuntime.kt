@@ -17,14 +17,15 @@ object TerminalRuntime {
 
         if (useProot) {
             // Unpack PRoot assets and rootfs if needed
-            ContainerInstaller.ensureInstalled(context)
-            RootfsInstaller.ensureInstalled(context)
+            val containerInstalled = ContainerInstaller.ensureInstalled(context)
+            val rootfsInstalled = RootfsInstaller.ensureInstalled(context)
 
             val nativeLibDir = context.applicationInfo.nativeLibraryDir
             val prootFile = File(nativeLibDir, "libproot.so")
             val rootfsDir = File(context.filesDir, "containers/alpine")
+            val alpineBinSh = File(rootfsDir, "bin/sh")
 
-            if (prootFile.exists()) {
+            if (containerInstalled && rootfsInstalled && prootFile.exists() && alpineBinSh.exists()) {
                 val args = arrayOf(
                     "-0",
                     "-r", rootfsDir.absolutePath,
