@@ -10,7 +10,7 @@ object RootfsInstaller {
     private const val TAG = "RootfsInstaller"
 
     fun isInstalled(context: Context): Boolean {
-        val rootfsDir = File(context.filesDir, "containers/debian")
+        val rootfsDir = File(context.filesDir, "containers/alpine")
         val shFile = File(rootfsDir, "bin/sh")
         val etcDir = File(rootfsDir, "etc")
         val usrDir = File(rootfsDir, "usr")
@@ -23,7 +23,14 @@ object RootfsInstaller {
             return true
         }
 
-        val rootfsDir = File(context.filesDir, "containers/debian")
+        // Diagnostic listing of assets to make sure we can find things
+        try {
+            context.assets.list("")?.forEach { Log.d(TAG, "Asset found in root: $it") }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error listing assets: ${e.message}")
+        }
+
+        val rootfsDir = File(context.filesDir, "containers/alpine")
         if (!rootfsDir.exists()) {
             rootfsDir.mkdirs()
         }

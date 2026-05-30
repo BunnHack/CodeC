@@ -22,7 +22,7 @@ object TerminalRuntime {
 
             val nativeLibDir = context.applicationInfo.nativeLibraryDir
             val prootFile = File(nativeLibDir, "libproot.so")
-            val rootfsDir = File(context.filesDir, "containers/debian")
+            val rootfsDir = File(context.filesDir, "containers/alpine")
 
             if (prootFile.exists()) {
                 val args = arrayOf(
@@ -33,7 +33,6 @@ object TerminalRuntime {
                     "-b", "/sys",
                     "-b", "${home.absolutePath}:/root",
                     "-w", "/root",
-                    "--",
                     "/bin/sh"
                 )
                 return TerminalLaunchSpec(
