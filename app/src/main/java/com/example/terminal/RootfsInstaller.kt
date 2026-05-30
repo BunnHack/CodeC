@@ -3,8 +3,10 @@ package com.example.terminal
 import android.content.Context
 import android.util.Log
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.zip.GZIPInputStream
 
 object RootfsInstaller {
     private const val TAG = "RootfsInstaller"
@@ -35,7 +37,7 @@ object RootfsInstaller {
             rootfsDir.mkdirs()
         }
 
-        onProgress("Extracting Alpine rootfs, please wait...")
+        onProgress("Preparing Alpine rootfs extraction, please wait...")
         Log.d(TAG, "Starting Rootfs installation...")
 
         // Determine the actual asset name packed in APK (could be .tar or .tar.gz)
@@ -44,7 +46,7 @@ object RootfsInstaller {
             assetsList.contains("alpine-rootfs.tar") -> "alpine-rootfs.tar"
             assetsList.contains("alpine-rootfs.tar.gz") -> "alpine-rootfs.tar.gz"
             else -> {
-                assetsList.firstOrNull { it.startsWith("alpine-rootfs") } ?: "alpine-rootfs.tar.gz"
+                assetsList.firstOrNull { it.startsWith("alpine-rootfs") } ?: "alpine-rootfs.tar"
             }
         }
         val isGz = assetName.endsWith(".gz")
@@ -64,71 +66,16 @@ object RootfsInstaller {
             return false
         }
 
-        // Use busybox tar to extract
-        val nativeLibDir = context.applicationInfo.nativeLibraryDir
-        val busyboxFile = File(nativeLibDir, "libbusybox.so")
-
-        if (!busyboxFile.exists()) {
-            Log.e(TAG, "libbusybox.so not found at $nativeLibDir")
-            onProgress("Error: libbusybox.so not found.")
-            return false
-        }
-
-        onProgress("Unpacking rootfs files...")
+        onProgress("Unpacking rootfs files (using pure Kotlin extractor)...")
         try {
-            val tarArgs = listOf(
-                busyboxFile.absolutePath,
-                "tar",
-                if (isGz) "-zxf" else "-xf",
-                tempTarFile.absolutePath,
-                "-C",
-                rootfsDir.absolutePath
-            )
-            val processBuilder = ProcessBuilder(tarArgs)
-            processBuilder.directory(context.filesDir)
+            val fis = FileInputStream(tempTarFile)
+            val inputStream = if (isGz) GZIPInputStream(fis) else fis
             
-            // Set basic environment variables
-            val env = processBuilder.environment()
-            env["PATH"] = "/system/bin:/system/xbin"
-
-            val process = processBuilder.start()
-
-            // Read potential error streams in background to avoid pipe blocking
-            val errReader = Thread {
-                try {
-                    process.errorStream.bufferedReader().use { reader ->
-                        var line: String?
-                        while (reader.readLine().also { line = it } != null) {
-                            Log.e(TAG, "[tar err] $line")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error in tar error stream reader thread", e)
-                }
+            inputStream.use { stream ->
+                TarExtractor.extractTar(stream, rootfsDir)
             }
-            errReader.start()
-
-            val stdoutReader = Thread {
-                try {
-                    process.inputStream.bufferedReader().use { reader ->
-                        var line: String?
-                        while (reader.readLine().also { line = it } != null) {
-                            Log.d(TAG, "[tar out] $line")
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.d(TAG, "Error in tar output stream reader thread", e)
-                }
-            }
-            stdoutReader.start()
-
-            val exitCode = process.waitFor()
-            Log.d(TAG, "Tar extraction finished with exit code $exitCode")
-
-            if (exitCode != 0) {
-                onProgress("Extraction failed with exit code $exitCode.")
-                return false
-            }
+            
+            Log.d(TAG, "Tar extraction finished successfully!")
         } catch (e: Exception) {
             Log.e(TAG, "Exception during tar extraction", e)
             onProgress("Error: ${e.message}")
@@ -157,6 +104,54 @@ object RootfsInstaller {
 
         onProgress("Rootfs installed successfully!")
         Log.i(TAG, "Rootfs installed successfully!")
+        
+        // Also write initial resolv.conf
+        updateResolvConf(context)
+        
         return true
+    }
+
+    fun updateResolvConf(context: Context) {
+        val rootfsDir = File(context.filesDir, "containers/alpine")
+        val etcDir = File(rootfsDir, "etc")
+        if (!etcDir.exists()) {
+            etcDir.mkdirs()
+        }
+        val resolvConf = File(etcDir, "resolv.conf")
+        
+        val dnsList = mutableListOf<String>()
+        try {
+            val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            if (cm != null) {
+                val activeNetwork = cm.activeNetwork
+                if (activeNetwork != null) {
+                    val linkProperties = cm.getLinkProperties(activeNetwork)
+                    if (linkProperties != null) {
+                        for (dnsServer in linkProperties.dnsServers) {
+                            val ip = dnsServer?.hostAddress
+                            if (!ip.isNullOrBlank()) {
+                                dnsList.add(ip)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error getting DNS servers from ConnectivityManager", e)
+        }
+
+        // Fallbacks if list is empty
+        if (dnsList.isEmpty()) {
+            dnsList.add("1.1.1.1")
+            dnsList.add("8.8.8.8")
+        }
+
+        val content = dnsList.joinToString("\n") { "nameserver $it" } + "\n"
+        try {
+            resolvConf.writeText(content)
+            Log.d(TAG, "Successfully updated resolv.conf with dns: $dnsList")
+        } catch (e: IOException) {
+            Log.e(TAG, "Failed to write resolv.conf", e)
+        }
     }
 }

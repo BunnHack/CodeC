@@ -19,6 +19,9 @@ object TerminalRuntime {
             // Unpack PRoot assets and rootfs if needed
             val containerInstalled = ContainerInstaller.ensureInstalled(context)
             val rootfsInstalled = RootfsInstaller.ensureInstalled(context)
+            if (rootfsInstalled) {
+                RootfsInstaller.updateResolvConf(context)
+            }
 
             val nativeLibDir = context.applicationInfo.nativeLibraryDir
             val prootFile = File(nativeLibDir, "libproot.so")
