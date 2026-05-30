@@ -4,7 +4,7 @@ import android.content.Context
 import java.io.File
 
 object TerminalRuntime {
-    fun buildSystemShell(context: Context): TerminalLaunchSpec {
+    fun buildSystemShell(context: Context, useProot: Boolean = false): TerminalLaunchSpec {
         // Ensure installer runs first
         RuntimeInstaller.ensureInstalled(context)
 
@@ -14,7 +14,29 @@ object TerminalRuntime {
         
         val nativeLibDir = context.applicationInfo.nativeLibraryDir
         val sourceBusybox = File(nativeLibDir, "libbusybox.so")
-        val binPath = File(prefix, "bin").absolutePath
+
+        if (useProot) {
+            // Unpack PRoot assets if needed
+            ContainerInstaller.ensureInstalled(context)
+
+            val prootFile = File(prefix, "bin/proot")
+            if (prootFile.exists()) {
+                val args = arrayOf("/system/bin/sh")
+                return TerminalLaunchSpec(
+                    executable = prootFile.absolutePath,
+                    workingDirectory = home.absolutePath,
+                    args = args,
+                    environment = arrayOf(
+                        "HOME=${home.absolutePath}",
+                        "TMPDIR=${tmp.absolutePath}",
+                        "TERM=xterm-256color",
+                        "LD_LIBRARY_PATH=${prefix.absolutePath}/lib",
+                        "PROOT_LOADER=${prefix.absolutePath}/libexec/proot/loader",
+                        "PATH=/system/bin:/system/xbin"
+                    )
+                )
+            }
+        }
 
         val executable = if (sourceBusybox.exists()) {
             sourceBusybox.absolutePath
@@ -23,7 +45,7 @@ object TerminalRuntime {
         }
 
         val args = if (sourceBusybox.exists()) {
-            arrayOf("sh", "-l")
+            arrayOf("sh")
         } else {
             arrayOf("-l")
         }
@@ -33,13 +55,12 @@ object TerminalRuntime {
             workingDirectory = home.absolutePath,
             args = args,
             environment = arrayOf(
-                "PREFIX=${prefix.absolutePath}",
                 "HOME=${home.absolutePath}",
                 "TMPDIR=${tmp.absolutePath}",
-                "PATH=$binPath:/system/bin:/system/xbin",
                 "TERM=xterm-256color",
-                "BUSYBOX_EXEC=${sourceBusybox.absolutePath}"
+                "PATH=/system/bin:/system/xbin"
             )
         )
     }
 }
+

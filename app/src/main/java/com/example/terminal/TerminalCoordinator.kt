@@ -11,8 +11,8 @@ class TerminalCoordinator(
     var session: TerminalSession? = null
         private set
 
-    fun start(sessionClient: TerminalSessionClient) {
-        val spec = TerminalRuntime.buildSystemShell(context)
+    fun start(sessionClient: TerminalSessionClient, useProot: Boolean = false) {
+        val spec = TerminalRuntime.buildSystemShell(context, useProot)
         session = TerminalSession(
             spec.executable,
             spec.workingDirectory,

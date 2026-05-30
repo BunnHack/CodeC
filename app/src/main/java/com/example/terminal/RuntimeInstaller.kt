@@ -44,15 +44,7 @@ object RuntimeInstaller {
 
         val profileFile = File(homeDir, ".profile")
         try {
-            val profileContent = buildString {
-                appendLine("export PS1='\\w \\$ '")
-                appendLine("if [ -n \"\$BUSYBOX_EXEC\" ] && [ -f \"\$BUSYBOX_EXEC\" ]; then")
-                appendLine("    for cmd in \$(\"\$BUSYBOX_EXEC\" --list); do")
-                appendLine("        eval \"\$cmd() { \\\"\$BUSYBOX_EXEC\\\" \$cmd \\\"\\$@\\\"; }\"")
-                appendLine("    done")
-                appendLine("    busybox() { \"\$BUSYBOX_EXEC\" busybox \"\$@\"; }")
-                appendLine("fi")
-            }
+            val profileContent = "export PS1='\\w \\$ '\n"
             profileFile.writeText(profileContent)
             Log.d(TAG, ".profile written successfully.")
         } catch (e: Exception) {

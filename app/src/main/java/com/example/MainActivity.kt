@@ -1330,8 +1330,9 @@ fun TerminalPane(modifier: Modifier = Modifier) {
     val activity = context as android.app.Activity
     val coordinator = remember { com.example.terminal.TerminalCoordinator(context) }
     var terminalViewRef by remember { mutableStateOf<TerminalView?>(null) }
+    var selectedShellType by remember { mutableStateOf("busybox") } // "busybox" or "proot"
 
-    DisposableEffect(Unit) {
+    DisposableEffect(selectedShellType) {
         val sessionClient = com.example.terminal.AppTerminalSessionClient(
             onRefresh = { 
                 terminalViewRef?.post { 
@@ -1340,7 +1341,7 @@ fun TerminalPane(modifier: Modifier = Modifier) {
             },
             onFinished = { }
         )
-        coordinator.start(sessionClient)
+        coordinator.start(sessionClient, useProot = (selectedShellType == "proot"))
         terminalViewRef?.let { coordinator.attach(it, requestFocus = false) }
         
         onDispose { coordinator.stop() }
@@ -1355,7 +1356,10 @@ fun TerminalPane(modifier: Modifier = Modifier) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(24.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text("PROBLEMS", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp)
                 Text("OUTPUT", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp)
                 Text("DEBUG CONSOLE", color = TextMuted, fontSize = 11.sp, fontWeight = FontWeight.Medium, letterSpacing = 0.5.sp)
@@ -1364,7 +1368,63 @@ fun TerminalPane(modifier: Modifier = Modifier) {
                     Box(modifier = Modifier.padding(top = 4.dp).height(2.dp).width(55.dp).background(AccentColor))
                 }
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Shell Type Selection Tabs/Chips
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // BusyBox Tab
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                if (selectedShellType == "busybox") AccentColor.copy(alpha = 0.15f) else androidx.compose.ui.graphics.Color.Transparent,
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .border(
+                                1.dp,
+                                if (selectedShellType == "busybox") AccentColor else androidx.compose.ui.graphics.Color.Transparent,
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .clickable { selectedShellType = "busybox" }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            "BusyBox",
+                            color = if (selectedShellType == "busybox") TextNormal else TextMuted,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    // PRoot Tab
+                    Box(
+                        modifier = Modifier
+                            .background(
+                                if (selectedShellType == "proot") AccentColor.copy(alpha = 0.15f) else androidx.compose.ui.graphics.Color.Transparent,
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .border(
+                                1.dp,
+                                if (selectedShellType == "proot") AccentColor else androidx.compose.ui.graphics.Color.Transparent,
+                                shape = RoundedCornerShape(4.dp)
+                            )
+                            .clickable { selectedShellType = "proot" }
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            "PRoot (Sandbox)",
+                            color = if (selectedShellType == "proot") TextNormal else TextMuted,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
                 Icon(Icons.Filled.Add, contentDescription = "New Terminal", tint = TextMuted, modifier = Modifier.size(16.dp))
                 Icon(Icons.Filled.Delete, contentDescription = "Kill Terminal", tint = TextMuted, modifier = Modifier.size(16.dp))
                 Icon(Icons.Filled.Close, contentDescription = "Close Panel", tint = TextMuted, modifier = Modifier.size(16.dp))
