@@ -22,7 +22,7 @@ object TerminalRuntime {
             val nativeLibDir = context.applicationInfo.nativeLibraryDir
             val prootFile = File(nativeLibDir, "libproot.so")
             if (prootFile.exists()) {
-                val args = arrayOf("/system/bin/sh")
+                val args = arrayOf("--", "/system/bin/sh")
                 return TerminalLaunchSpec(
                     executable = prootFile.absolutePath,
                     workingDirectory = home.absolutePath,

@@ -38,6 +38,7 @@ object ContainerInstaller {
         // Create directory hierarchy
         val directories = listOf(
             File(filesDir, "usr/lib"),
+            File(filesDir, "usr/tmp"),
             File(filesDir, "containers"),
             File(filesDir, "home")
         )
