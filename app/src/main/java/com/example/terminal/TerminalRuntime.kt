@@ -19,7 +19,8 @@ object TerminalRuntime {
             // Unpack PRoot assets if needed
             ContainerInstaller.ensureInstalled(context)
 
-            val prootFile = File(prefix, "bin/proot")
+            val nativeLibDir = context.applicationInfo.nativeLibraryDir
+            val prootFile = File(nativeLibDir, "libproot.so")
             if (prootFile.exists()) {
                 val args = arrayOf("/system/bin/sh")
                 return TerminalLaunchSpec(
@@ -30,8 +31,8 @@ object TerminalRuntime {
                         "HOME=${home.absolutePath}",
                         "TMPDIR=${tmp.absolutePath}",
                         "TERM=xterm-256color",
-                        "LD_LIBRARY_PATH=${prefix.absolutePath}/lib",
-                        "PROOT_LOADER=${prefix.absolutePath}/libexec/proot/loader",
+                        "LD_LIBRARY_PATH=${prefix.absolutePath}/lib:${nativeLibDir}",
+                        "PROOT_LOADER=${File(nativeLibDir, "libproot_loader.so").absolutePath}",
                         "PATH=/system/bin:/system/xbin"
                     )
                 )

@@ -20,7 +20,8 @@ object ContainerRuntime {
         val results = mutableListOf<TestResult>()
         val filesDir = context.filesDir
         val prefix = File(filesDir, "usr")
-        val prootFile = File(prefix, "bin/proot")
+        val nativeLibDir = File(context.applicationInfo.nativeLibraryDir)
+        val prootFile = File(nativeLibDir, "libproot.so")
 
         if (!prootFile.exists()) {
             results.add(TestResult("Check proot binary", false, "", "proot executable not found at ${prootFile.absolutePath}"))
@@ -58,8 +59,9 @@ object ContainerRuntime {
             processBuilder.directory(context.filesDir)
             
             val env = processBuilder.environment()
-            env["LD_LIBRARY_PATH"] = "${prefix.absolutePath}/lib"
-            env["PROOT_LOADER"] = "${prefix.absolutePath}/libexec/proot/loader"
+            val nativeLibDir = context.applicationInfo.nativeLibraryDir
+            env["LD_LIBRARY_PATH"] = "${prefix.absolutePath}/lib:${nativeLibDir}"
+            env["PROOT_LOADER"] = File(nativeLibDir, "libproot_loader.so").absolutePath
             env["HOME"] = File(context.filesDir, "home").absolutePath
             env["TMPDIR"] = File(context.cacheDir, "tmp").absolutePath
             env["PATH"] = "/system/bin:/system/xbin"

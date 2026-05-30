@@ -10,14 +10,19 @@ object ContainerInstaller {
     private const val TAG = "ContainerInstaller"
 
     private val ASSETS_TO_UNPACK = listOf(
-        "termux/usr/bin/proot" to "usr/bin/proot",
-        "termux/usr/lib/libtalloc.so" to "usr/lib/libtalloc.so",
-        "termux/usr/lib/libtalloc.so.2" to "usr/lib/libtalloc.so.2",
-        "termux/usr/libexec/proot/loader" to "usr/libexec/proot/loader",
-        "termux/usr/libexec/proot/loader32" to "usr/libexec/proot/loader32"
+        "termux/usr/lib/libtalloc.so.2" to "usr/lib/libtalloc.so.2"
     )
 
     fun isInstalled(context: Context): Boolean {
+        // Also check if native jniLibs exist at context.applicationInfo.nativeLibraryDir
+        val nativeLibDir = File(context.applicationInfo.nativeLibraryDir)
+        val libproot = File(nativeLibDir, "libproot.so")
+        val libloader = File(nativeLibDir, "libproot_loader.so")
+        
+        if (!libproot.exists() || !libloader.exists()) {
+            return false
+        }
+
         for ((_, targetRelativePath) in ASSETS_TO_UNPACK) {
             val targetFile = File(context.filesDir, targetRelativePath)
             if (!targetFile.exists() || targetFile.length() == 0L) {
@@ -32,9 +37,7 @@ object ContainerInstaller {
 
         // Create directory hierarchy
         val directories = listOf(
-            File(filesDir, "usr/bin"),
             File(filesDir, "usr/lib"),
-            File(filesDir, "usr/libexec/proot"),
             File(filesDir, "containers"),
             File(filesDir, "home")
         )
@@ -68,12 +71,7 @@ object ContainerInstaller {
                     }
                 }
                 
-                // Set executable permission for binaries/loaders
-                if (targetRelativePath.contains("bin/") || targetRelativePath.contains("loader")) {
-                    val execResult = targetFile.setExecutable(true, false)
-                    val readResult = targetFile.setReadable(true, false)
-                    Log.d(TAG, "Permissions set for $targetRelativePath: exec=$execResult, read=$readResult")
-                }
+                targetFile.setReadable(true, false)
             } catch (e: IOException) {
                 Log.e(TAG, "Failed to unpack asset $assetPath: ${e.message}", e)
                 return false
